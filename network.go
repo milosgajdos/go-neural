@@ -23,10 +23,11 @@ const (
 
 // randomString generates r pseudoandom string of specified size
 func randomString(size int) string {
+	rand.Seed(55)
 	alphanum := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	bytes := make([]byte, size)
 	rand.Read(bytes)
-
+	// iterate through all alphanum bytes
 	for i, b := range bytes {
 		bytes[i] = alphanum[b%byte(len(alphanum))]
 	}
@@ -49,7 +50,7 @@ func addBias(x *mat64.Dense) *mat64.Dense {
 	return xMx
 }
 
-// ones returns a matrix of rowsxcols filled with 1.0
+// ones returns a matrix of rows x cols filled with 1.0
 func ones(rows, cols int) *mat64.Dense {
 	onesMx := mat64.NewDense(rows, cols, nil)
 	for i := 0; i < rows; i++ {
@@ -123,129 +124,72 @@ func (n *Network) Train(x *mat64.Dense, y *mat64.Vector,
 	labels uint, lambda float64, iters uint) (float64, error) {
 	// number of data samples
 	dataLen, _ := x.Dims()
-	//fmt.Printf("Sample number: %d\n", dataLen)
 	// run forward propagation
 	outMx, _ := n.forwardProp(x, 1)
-	//of := mat64.Formatted(outMx, mat64.Prefix(""))
-	//fmt.Println("OUTPUT matrix first row")
-	//fmt.Printf("%v\n\n", of)
 	// each row represents the expected (labeled) result
 	labelsMx := mat64.NewDense(dataLen, int(labels), nil)
 	for i := 0; i < y.Len(); i++ {
 		val := y.At(i, 0)
-		//fmt.Printf("Y label %d: %f\n", i, val)
 		labelsMx.Set(i, int(val)-1, 1.0)
 	}
-	//of := mat64.Formatted(labelsMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
-	// log10Func will helps us calculate log10 of each matrix element
-	log10Func := func(i, j int, x float64) float64 {
-		return math.Log(x)
-	}
-	// subtOneFunc will help us subtract matrix elements from 1.0
-	subtFromOneFunc := func(i, j int, x float64) float64 {
-		return 1.0 - x
-	}
-	// J <- -(sum(sum((yk * log(a3) + (1 - yk) * log(1 - a3)), 2)))/m
 	// J = -(sum(sum((Y_k .* log(a3) + (1 - Y_k) .* log(1 - a3)), 2)))/m;
-	log10OutMx := new(mat64.Dense)
-	// log10(outMx)
-	log10OutMx.Apply(log10Func, outMx)
-	//of = mat64.Formatted(log10OutMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
+	logOutMx := new(mat64.Dense)
+	// log(outMx)
+	logOutMx.Apply(LogMx, outMx)
 	mulMxA := new(mat64.Dense)
-	// y*log10(outMx)
-	//inR, inC := labelsMx.Dims()
-	//fmt.Printf("LabelsMX: %d, %d\n", inR, inC)
-	//inR, inC = log10OutMx.Dims()
-	//fmt.Printf("log10OutMx: %d, %d\n", inR, inC)
-	mulMxA.MulElem(labelsMx, log10OutMx)
-	//of = mat64.Formatted(mulMxA, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
+	// y*log(outMx)
+	mulMxA.MulElem(labelsMx, logOutMx)
 	// 1 - y
-	labelsMx.Apply(subtFromOneFunc, labelsMx)
-	//of = mat64.Formatted(labelsMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
+	labelsMx.Apply(SubtrMx, labelsMx)
 	// 1 - outMx
-	outMx.Apply(subtFromOneFunc, outMx)
-	//of = mat64.Formatted(outMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
-	// log10(1-outMx)
-	outMx.Apply(log10Func, outMx)
-	//of = mat64.Formatted(outMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
+	outMx.Apply(SubtrMx, outMx)
+	// log(1-outMx)
+	outMx.Apply(LogMx, outMx)
 	mulMxB := new(mat64.Dense)
-	// (1 - y) * log10(1-outMx)
+	// (1 - y) * log(1-outMx)
 	mulMxB.MulElem(labelsMx, outMx)
-	//of = mat64.Formatted(mulMxB, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
-	// y*log10(outMx) + (1 - y)*log10(1-outMx)
+	// y*log(outMx) + (1 - y)*log(1-outMx)
 	mulMxB.Add(mulMxA, mulMxB)
-	//of = mat64.Formatted(mulMxB, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
 	cost := -(mat64.Sum(mulMxB) / float64(dataLen))
 	fmt.Printf("Non-Reg Cost: \n%f\n", cost)
-	// regularizer = (lambda/(2*m))*(sum(sum(Theta1(:,2:end).^2)) + sum(sum(Theta2(:,2:end).^2)));
+	// calculate regularizer
 	if lambda > 0 {
-		powFunc := func(i, j int, x float64) float64 {
-			return x * x
-		}
 		layers := n.Layers()
 		// Ignore first layer i.e. input layer
 		for _, layer := range layers[1:] {
 			r, c := layer.weightMx.Dims()
-			//of = mat64.Formatted(layer.weightMx, mat64.Prefix(""))
-			//fmt.Printf("%v\n\n", of)
 			// Don't penalize bias
 			wViewMx := layer.weightMx.View(0, 1, r, c-1)
-			//of = mat64.Formatted(wViewMx, mat64.Prefix(""))
-			//fmt.Printf("%v\n\n", of)
 			powMx := new(mat64.Dense)
-			powMx.Apply(powFunc, wViewMx)
+			powMx.Apply(PowerMx, wViewMx)
 			cost += (lambda / (2 * float64(dataLen))) / mat64.Sum(powMx)
 		}
 	}
 	return cost, nil
 }
 
+func (Network) costFunc(x []float64) float64 {
+	return 0.0
+}
+
+func (Network) gradFunc(grad, x []float64) {
+}
+
 // feedForward recursively progresses Neural Network
 func (n *Network) forwardProp(inMx *mat64.Dense, layerIdx int) (*mat64.Dense, int) {
-	//fmt.Printf("Layer Idx: %d\n", layerIdx)
 	if layerIdx > len(n.layers)-1 {
 		return inMx, layerIdx
 	}
 	// add bias to data matrix
 	biasInMx := addBias(inMx)
-	//inR, inC := biasInMx.Dims()
-	//fmt.Printf("inMx rows: %d, inMx cols: %d\n", inR, inC)
-	//fmt.Println("========================================================================")
-	//of := mat64.Formatted(biasInMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
-	//fmt.Printf("First row %d IN-WEIGHT layer\n", layerIdx)
-	//of = mat64.Formatted(n.layers[layerIdx].weightMx.RowView(0), mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
 	// compute activations
 	weightMx := new(mat64.Dense)
 	layer := n.layers[layerIdx]
-	//fmt.Println("WEIGHT MATRIX")
-	//fmt.Println("========================================================================")
-	//of := mat64.Formatted(layer.weightMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", of)
 	weightMx.Mul(biasInMx, layer.weightMx.T())
-	// of = mat64.Formatted(weightMx.RowView(0), mat64.Prefix(""))
-	//fmt.Println("========================================================================")
-	//of = mat64.Formatted(weightMx, mat64.Prefix(""))
-	//fmt.Printf("First row %d OUT-WEIGHT matrix\n", layerIdx)
-	//fmt.Printf("%v\n\n", of)
 	activFunc := func(i, j int, x float64) float64 {
 		return layer.actFuncs.ForwFn(x)
 	}
 	weightMx.Apply(activFunc, weightMx)
-	//of = mat64.Formatted(weightMx.RowView(0), mat64.Prefix(""))
-	//fmt.Println("========================================================================")
-	//of = mat64.Formatted(weightMx, mat64.Prefix(""))
-	//fmt.Printf("First row %d LOG-WEIGHT matrix\n", layerIdx)
-	//fmt.Printf("%v\n\n", of)
 	layerIdx += 1
 	return n.forwardProp(weightMx, layerIdx)
 }
@@ -368,14 +312,4 @@ type ActivationFn func(float64) float64
 type NeuronFunc struct {
 	ForwFn ActivationFn
 	BackFn ActivationFn
-}
-
-// Sigmoid activation function
-func Sigmoid(x float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-x))
-}
-
-// Sigmoid derivation used in backprop algorithm
-func SigmoidGrad(x float64) float64 {
-	return Sigmoid(x) * (1 - Sigmoid(x))
 }
