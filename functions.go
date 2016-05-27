@@ -7,14 +7,18 @@ func LogMx(i, j int, x float64) float64 {
 	return math.Log(x)
 }
 
-// subtOneFunc will help us subtract matrix elements from 1.0
-func SubtrMx(i, j int, x float64) float64 {
-	return 1.0 - x
+// SubtrMx allows to subtract a number from all elements of matrix
+func SubtrMx(f float64) func(int, int, float64) float64 {
+	return func(i, j int, x float64) float64 {
+		return f - x
+	}
 }
 
-// PowerMx provides can be used to calculate power of matrix elements
-func PowerMx(i, j int, x float64) float64 {
-	return x * x
+// PowMx can be used to calculate power of matrix elements
+func PowMx(f float64) func(int, int, float64) float64 {
+	return func(i, j int, x float64) float64 {
+		return math.Pow(x, f)
+	}
 }
 
 // Sigmoid activation function

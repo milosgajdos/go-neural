@@ -12,11 +12,14 @@ var (
 	dataPath string
 	// do we want to normalize data
 	reqScale bool
+	// number of labels
+	labels int
 )
 
 func init() {
 	flag.StringVar(&dataPath, "data", "", "Path to training data set")
 	flag.BoolVar(&reqScale, "scale", false, "Require data scaling")
+	flag.IntVar(&labels, "labels", 0, "Number of class labels")
 }
 
 func parseCliFlags() error {
@@ -48,16 +51,21 @@ func main() {
 	}
 	_, featCount := featMx.Dims()
 	// Create new Neural Network:
-	// 1 input layer, 1 hidden layer, 1 output layer
-	//layers := []uint{uint(featCount), 25, 5}
-	layers := []uint{uint(featCount), 25, 10}
+	hiddenLayerSize := uint(25)
+	// TODO: what happens if outputLayerSize > nrLabels - check the code
+	outputLayerSize := uint(labels)
+	if outputLayerSize != uint(labels) {
+		fmt.Printf("Output layer must be same as number of labels\n")
+		os.Exit(1)
+	}
+	layers := []uint{uint(featCount), hiddenLayerSize, outputLayerSize}
 	nn, err := NewNetwork(FEEDFWD, layers)
 	if err != nil {
 		fmt.Printf("Unable to initialize %s Neural network: %s\n", FEEDFWD, err)
 		os.Exit(1)
 	}
 	// Train the network and return the cost value
-	cost, err := nn.Train(featMx, labelVec, 10, 1.0, 50)
+	cost, err := nn.Train(featMx, labelVec, labels, 1.0, 50)
 	if err != nil {
 		fmt.Printf("Unable to train %s network: %s\n", nn.Kind(), err)
 		os.Exit(1)
