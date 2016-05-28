@@ -94,7 +94,6 @@ func mx2Vec(mx *mat64.Dense) []float64 {
 	for i := 0; i < cols; i++ {
 		colView := mx.ColView(i)
 		for j := 0; j < colView.Len(); j++ {
-			//fmt.Println(colView.At(j, 0))
 			vector[i*rows+j] = colView.At(j, 0)
 		}
 	}
@@ -151,16 +150,9 @@ func NewNetwork(netKind NetworkKind, layers []uint) (*Network, error) {
 		if err != nil {
 			return nil, err
 		}
-		//if id != 0 {
-		//	r, c := layer.Weights().Dims()
-		//	fmt.Printf("Initializing layer %d Weights, rows: %d, cols: %d\n", id, r, c)
-		//	r, c = layer.Deltas().Dims()
-		//	fmt.Printf("Initializing layer %d Deltas, rows: %d, cols: %d\n", id, r, c)
-		//}
 		net.layers = append(net.layers, layer)
 		layerIn = layerOut
 	}
-	//fmt.Printf("Layer count: %d\n", len(net.layers))
 	return net, nil
 }
 
@@ -268,90 +260,44 @@ func (n *Network) backProp(inMx, deltaMx mat64.Matrix,
 	// network layers
 	layers := n.Layers()
 	// Weights and Deltas from the same layer
-	bpWeightsMx := layers[layerIdx].Weights()
-	bpDeltasMx := layers[layerIdx].Deltas()
+	bpWeightLayer := layers[layerIdx]
+	bpWeightsMx := bpWeightLayer.Weights()
+	bpDeltasMx := bpWeightLayer.Deltas()
 	// Out layer produces output to the w/d layer
 	bpOutLayer := layers[outIdx]
 	bpOutMx := bpOutLayer.Out()
-	// Printouts
-	//fmt.Printf("Layer WeightsIdx: %d\n", layerIdx)
-	//fmt.Printf("Layer DeltasIdx: %d\n", layerIdx)
-	//fmt.Printf("Layer OutIdx: %d\n", outIdx)
-	//r, c := bpWeightsMx.Dims()
-	//fmt.Printf("weightsMX rows: %d, cols: %d\n", r, c)
-	//r, c = bpDeltasMx.Dims()
-	//fmt.Printf("deltasMX rows: %d, cols: %d\n", r, c)
-	//r, c = bpOutMx.Dims()
-	//fmt.Printf("outMX rows: %d, cols: %d\n", r, c)
+	bpActInMx := bpOutLayer.ActIn()
 	// If we reach the first hidden layer, return
 	if outIdx == 0 {
 		dMx := new(mat64.Dense)
 		// inMx is the same as bpOutMx(i)
 		biasInMx := addBias(inMx)
-		//r, c := biasInMx.Dims()
-		//fmt.Printf("Bias inMx rows: %d, cols: %d\n", r, c)
 		dMx.Mul(deltaMx.T(), biasInMx)
 		bpDeltasMx.Add(bpDeltasMx, dMx)
 		return bpDeltasMx, layerIdx
 	}
-	// Layer activation functions forward and backward
-	forwFunc := func(i, j int, x float64) float64 {
-		return bpOutLayer.NeuronFunc().ForwFn(x)
-	}
-	backFunc := func(i, j int, x float64) float64 {
-		return bpOutLayer.NeuronFunc().BackFn(x)
-	}
-	// sigmoid(Out)
-	actOut := new(mat64.Dense)
-	actOut.Apply(forwFunc, bpOutMx)
-	//r, c = actOut.Dims()
-	//fmt.Printf("ActOut rows: %d, cols: %d\n", r, c)
-	biasActOut := addBias(actOut)
+	// add bias to Out matrix
+	biasOutMx := addBias(bpOutMx)
 	// Just pick the first row
-	actSample := biasActOut.RowView(sampleIdx).T()
-	//r, c = actSample.Dims()
-	//fmt.Printf("BiasActOut rows: %d, cols: %d\n", r, c)
-	//fmt.Println("BiasActOut")
-	//fa := mat64.Formatted(actSample, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", fa)
-	//r, c = deltaMx.Dims()
-	//fmt.Printf("DeltaMX rows: %d, cols: %d\n", r, c)
-	//fmt.Println("DeltaMx")
-	//fa = mat64.Formatted(deltaMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", fa)
+	outSample := biasOutMx.RowView(sampleIdx).T()
 	// delta_i'*a_(i-1)
 	dMx := new(mat64.Dense)
-	dMx.Mul(deltaMx.T(), actSample)
-	//r, c = dMx.Dims()
-	//fmt.Printf("DMX out rows: %d, cols: %d\n", r, c)
-	//fmt.Println("DMX out")
-	//fa = mat64.Formatted(dMx, mat64.Prefix(""))
-	//fmt.Printf("%v\n\n", fa)
-	//r, c = bpDeltasMx.Dims()
-	//fmt.Printf("Deltas rows: %d, cols: %d\n", r, c)
-	// D = D + delta*Sig(Oi)
+	dMx.Mul(deltaMx.T(), outSample)
+	// D = D + delta*O(i)
 	bpDeltasMx.Add(bpDeltasMx, dMx)
 	// tmp var
 	tmp := new(mat64.Dense)
 	tmp.Mul(bpWeightsMx.T(), deltaMx.T())
-	//r, c = bpWeightsMx.T().Dims()
-	//fmt.Printf("BP WEIGHTS rows: %d, cols: %d\n", r, c)
-	//r, c = deltaMx.T().Dims()
-	//fmt.Printf("DeltaMX rows: %d, cols: %d\n", r, c)
-	r, c := tmp.Dims()
-	//fmt.Printf("TMP rows: %d, cols: %d\n", r, c)
 	// ignore the bias output
+	r, c := tmp.Dims()
 	delta := tmp.View(1, 0, r-1, c).(*mat64.Dense)
-	//r, c = delta.T().Dims()
-	//fmt.Printf("NEW DELTA rows: %d, cols: %d\n", r, c)
-	// compute sigmoid gradient for a particular sample layer output
-	outSample := bpOutMx.RowView(sampleIdx).T()
-	//r, c = outSample.Dims()
-	//fmt.Printf("OUT SAMPLE rows: %d, cols: %d\n", r, c)
+	// compute sigmoid gradient for a particular activation input
+	backFunc := func(i, j int, x float64) float64 {
+		return bpOutLayer.NeuronFunc().BackFn(x)
+	}
+	actInSample := bpActInMx.RowView(sampleIdx).T()
 	sigGradOut := new(mat64.Dense)
-	sigGradOut.Apply(backFunc, outSample)
-	//r, c = sigGradOut.Dims()
-	//fmt.Printf("SIGMOID GRAD rows: %d, cols: %d\n", r, c)
+	sigGradOut.Apply(backFunc, actInSample)
 	sigGradOut.MulElem(delta.T(), sigGradOut)
 	// run recursively
 	return n.backProp(inMx, sigGradOut, layerIdx-1, outIdx-1, sampleIdx)
@@ -371,29 +317,12 @@ func (n *Network) Gradient(gradient []float64, x *mat64.Dense, y *mat64.Vector,
 	for i := 0; i < samples; i++ {
 		// pick a sample
 		inSample := x.RowView(i)
-		//fmt.Println("Input Sample")
-		//fa := mat64.Formatted(inSample, mat64.Prefix(""))
-		//fmt.Printf("%v\n\n", fa)
 		// pick the expected output
 		expOutput := labelsMx.RowView(i)
-		//r, c := expOutput.Dims()
-		//fmt.Printf("expOutput rows: %d, cols: %d\n", r, c)
-		//fmt.Println("Expected Output")
-		//fa := mat64.Formatted(expOutput, mat64.Prefix(""))
-		//fmt.Printf("%v\n\n", fa)
 		// pick actual output from output layer
 		output := layers[layerCount-1].Out().RowView(i)
-		//output := layers[layerCount-1].Out().ColView(i)
-		//r, c = output.Dims()
-		//fmt.Printf("Output rows: %d, cols: %d\n", r, c)
-		//fmt.Println("Computed output")
-		//fa = mat64.Formatted(output, mat64.Prefix(""))
-		//fmt.Printf("%v\n\n", fa)
 		// calculate the error = out - y
 		output.SubVec(output, expOutput)
-		//fmt.Println("Subtracted output")
-		//fa = mat64.Formatted(output, mat64.Prefix(""))
-		//fmt.Printf("%v\n\n", fa)
 		// run the backpropagation
 		n.backProp(inSample.T(), output.T(), layerCount-1, layerCount-2, i)
 	}
@@ -405,8 +334,6 @@ func (n *Network) Gradient(gradient []float64, x *mat64.Dense, y *mat64.Vector,
 		gradMx := n.GradientReg(i, lambda, samples)
 		gradMx.Add(deltas, gradMx)
 		r, c := gradMx.Dims()
-		//fmt.Printf("GradMx rows: %d, cols: %d\n", r, c)
-		//fmt.Println("WAT")
 		gradVec := mx2Vec(gradMx)
 		for j := 0; j < len(gradVec); j++ {
 			gradient[next+j] = gradVec[j]
@@ -487,6 +414,7 @@ type Layer struct {
 	kind     LayerKind
 	net      *Network
 	out      *mat64.Dense
+	actIn    *mat64.Dense
 	weights  *mat64.Dense
 	deltas   *mat64.Dense
 	neurFunc *NeuronFunc
@@ -538,6 +466,11 @@ func (l *Layer) Out() *mat64.Dense {
 	return l.out
 }
 
+// ActIn returns activation function input
+func (l *Layer) ActIn() *mat64.Dense {
+	return l.actIn
+}
+
 // SetWeights allows to set the layer's weights matrix
 func (l *Layer) SetWeights(weights *mat64.Dense) error {
 	if l.kind == INPUT {
@@ -561,24 +494,23 @@ func (l *Layer) SetDeltas(deltas *mat64.Dense) error {
 func (l *Layer) CompOut(inputMx *mat64.Dense) *mat64.Dense {
 	// if it's INPUT layer, output is input
 	if l.kind == INPUT {
-		//r, c := inputMx.Dims()
-		//fmt.Printf("%s Out rows: %d, cols: %d\n", r, c)
 		l.out = inputMx
 		return inputMx
 	}
 	// add bias to input
-	biasMx := addBias(inputMx)
+	biasInMx := addBias(inputMx)
 	// otherwise apply weights
-	out := new(mat64.Dense)
-	out.Mul(biasMx, l.weights.T())
+	actIn := new(mat64.Dense)
+	actIn.Mul(biasInMx, l.weights.T())
+	// store output matrix for this layer
+	l.actIn = actIn
 	// activate layer neurons
+	out := new(mat64.Dense)
 	activFunc := func(i, j int, x float64) float64 {
 		return l.neurFunc.ForwFn(x)
 	}
-	out.Apply(activFunc, out)
-	//r, c := out.Dims()
-	//fmt.Printf("%s Out rows: %d, cols: %d\n", r, c)
-	// store output matrix for this layer
+	out.Apply(activFunc, actIn)
+	// store activation matrix for this layer
 	l.out = out
 	return out
 }
