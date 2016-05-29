@@ -3,10 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/gonum/optimize"
 )
 
 const (
@@ -52,14 +54,17 @@ func addBias(x mat64.Matrix) *mat64.Dense {
 }
 
 // ones returns a matrix of rows x cols filled with 1.0
-func ones(rows, cols int) *mat64.Dense {
+func ones(rows, cols int) (*mat64.Dense, error) {
+	if rows <= 0 || cols <= 0 {
+		return nil, errors.New("Rows and columns must be positive integer")
+	}
 	onesMx := mat64.NewDense(rows, cols, nil)
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
 			onesMx.Set(i, j, 1.0)
 		}
 	}
-	return onesMx
+	return onesMx, nil
 }
 
 func makeLabelsMx(y *mat64.Vector, samples, labels int) *mat64.Dense {
@@ -87,17 +92,62 @@ func makeRandMx(rows, cols uint, min, max float64) *mat64.Dense {
 }
 
 // mx2Vec turns matrix to slice/vector
-func mx2Vec(mx *mat64.Dense) []float64 {
+func mx2Vec(m *mat64.Dense, byRow bool) []float64 {
+	if byRow {
+		return mxByRow(m)
+	}
+	return mxByCol(m)
+}
+
+func mxByRow(mx *mat64.Dense) []float64 {
 	rows, cols := mx.Dims()
-	//fmt.Printf("mx2Vec rows: %d, cols: %d\n", rows, cols)
 	vector := make([]float64, rows*cols)
-	for i := 0; i < cols; i++ {
-		colView := mx.ColView(i)
-		for j := 0; j < colView.Len(); j++ {
-			vector[i*rows+j] = colView.At(j, 0)
+	for i := 0; i < rows; i++ {
+		view := mx.RowView(i)
+		for j := 0; j < view.Len(); j++ {
+			vector[i*cols+j] = view.At(j, 0)
 		}
 	}
 	return vector
+}
+
+func mxByCol(mx *mat64.Dense) []float64 {
+	rows, cols := mx.Dims()
+	vector := make([]float64, rows*cols)
+	for i := 0; i < cols; i++ {
+		view := mx.ColView(i)
+		for j := 0; j < view.Len(); j++ {
+			vector[i*rows+j] = view.At(j, 0)
+		}
+	}
+	return vector
+}
+
+// vec2Mx copies vector into matrix
+func vec2Mx(vec []float64, mx *mat64.Dense, byRow bool) {
+	if byRow {
+		vecByRow(vec, mx)
+		return
+	}
+	vecByCol(vec, mx)
+}
+
+func vecByCol(vec []float64, mx *mat64.Dense) {
+	rows, cols := mx.Dims()
+	acc := 0
+	for i := 0; i < cols; i++ {
+		mx.SetCol(i, vec[acc:(acc+rows)])
+		acc += rows
+	}
+}
+
+func vecByRow(vec []float64, mx *mat64.Dense) {
+	rows, cols := mx.Dims()
+	acc := 0
+	for i := 0; i < rows; i++ {
+		mx.SetRow(i, vec[acc:(acc+cols)])
+		acc += cols
+	}
 }
 
 // Kind of a Network Layer
@@ -159,40 +209,70 @@ func NewNetwork(netKind NetworkKind, layers []uint) (*Network, error) {
 // Train runs Neural Network training for given training data X and labels y
 // It returns a precision percentage on the training data or error
 // TODO: config to specify kind of training etc.
-func (n *Network) Train(x *mat64.Dense, y *mat64.Vector,
-	labels int, lambda float64, iters uint) (float64, error) {
+func (n *Network) Train(mx *mat64.Dense, y *mat64.Vector,
+	labels int, lambda float64, iters int) (float64, error) {
 	// there must be at least one label
 	if labels <= 0 {
-		return 0.0, fmt.Errorf("Insufficient number of labels specified: %d\n", labels)
+		return 0.0, fmt.Errorf("Number of labels must be positive integer: %d\n", labels)
 	}
-	// number of data samples
-	samples, _ := x.Dims()
-	// calculate the cost of feedforward prop
-	cost := n.Cost(x, y, labels, samples)
-	fmt.Printf("Non-Reg Cost: \n%f\n", cost)
-	// calculate the regularizer
-	reg := n.CostReg(lambda, samples)
-	gradSize := 0
+	// weightsVec contains neural network parameters rolled into vector
+	weightsVec := make([]float64, 0)
+	// Roll in the layer weights Matrices into weightsVec
+	// TODO: this is temporary - need to find a way to avoid double allocation
 	layers := n.Layers()
 	for i := range layers[1:] {
-		r, c := layers[i+1].Weights().Dims()
-		gradSize += r * c
+		weightsVec = append(weightsVec, mx2Vec(layers[i+1].Weights(), false)...)
 	}
-	// allocate slice that stores gradient
-	gradient := make([]float64, gradSize)
-	fmt.Printf("Gradient length: %d\n", len(gradient))
-	n.Gradient(gradient, x, y, labels, lambda)
-	//fmt.Printf("Gradient: %v\n", gradient)
-	sum := 0.0
-	for i := range gradient {
-		sum += gradient[i]
+	// costFunc
+	costFunc := func(x []float64) float64 {
+		return n.CostFunc(x, mx, y, labels, lambda)
 	}
-	fmt.Printf("Gradient sum: %f\n", sum)
-	return cost + reg, nil
+	// gradFunc
+	// allocate slice for gradient
+	//gradientVec := make([]float64, len(weightsVec))
+	gradFunc := func(grad []float64, x []float64) {
+		if len(x) != len(grad) {
+			panic("incorrect size of the gradient")
+		}
+		n.GradFunc(grad, x, mx, y, labels, lambda)
+	}
+	// optimization problem
+	p := optimize.Problem{
+		Func: costFunc,
+		Grad: gradFunc,
+	}
+	settings := optimize.DefaultSettings()
+	settings.Recorder = nil
+	settings.FunctionConverge = nil
+	settings.MajorIterations = iters
+	result, err := optimize.Local(p, weightsVec, settings, &optimize.BFGS{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	//if err = result.Status.Err(); err != nil {
+	//	log.Fatal(err)
+	//}
+	fmt.Printf("result.Status: %v\n", result.Status)
+	// calculate the cost of feedforward prop
+	//cost := n.CostFunc(weightsVec, x, y, labels, lambda)
+	//grad := n.GradFunc(gradientVec, weightsVec, x, y, labels, lambda)
+	//fmt.Println("Gradient length", len(grad))
+	return 0.0, nil
 }
 
 // J = -(sum(sum((Y_k .* log(a3) + (1 - Y_k) .* log(1 - a3)), 2)))/m;
-func (n *Network) Cost(x *mat64.Dense, y *mat64.Vector, labels int, samples int) float64 {
+func (n *Network) CostFunc(netWeights []float64, x *mat64.Dense, y *mat64.Vector,
+	labels int, lambda float64) float64 {
+	// TODO: move to a separate function
+	layers := n.Layers()
+	acc := 0
+	for _, layer := range layers[1:] {
+		r, c := layer.Weights().Dims()
+		vec2Mx(netWeights[acc:(acc+r*c)], layer.Weights(), false)
+		acc += r * c
+	}
+	// number of data samples
+	samples, _ := x.Dims()
 	// run forward propagation - start from INPUT layer
 	outputMx, _ := n.forwardProp(x, 0)
 	// each row represents the expected (label) result
@@ -216,12 +296,16 @@ func (n *Network) Cost(x *mat64.Dense, y *mat64.Vector, labels int, samples int)
 	// y*log(outMx) + (1 - y)*log(1-outMx)
 	mulabelsMxB.Add(mulabelsMxA, mulabelsMxB)
 	cost := -(mat64.Sum(mulabelsMxB) / float64(samples))
+	// calculate the regularizer
+	reg := n.costReg(lambda, samples)
+	cost += reg
+	fmt.Printf("Cost: %f\n", cost)
 	return cost
 }
 
-// CostReg calculates regularizer cost of Network
+// CostFuncReg calculates regularizer cost of Network
 // (lambda/(2*m))*(sum(sum(Theta1(:,2:end).^2)) + sum(sum(Theta2(:,2:end).^2)))
-func (n *Network) CostReg(lambda float64, samples int) (cost float64) {
+func (n *Network) costReg(lambda float64, samples int) (cost float64) {
 	// calculate regularizer
 	if lambda > 0 {
 		layers := n.Layers()
@@ -251,6 +335,74 @@ func (n *Network) forwardProp(inMx mat64.Matrix, layerIdx int) (*mat64.Dense, in
 	out := new(mat64.Dense)
 	out.Clone(layer.CompOut(inMx.(*mat64.Dense)))
 	return n.forwardProp(out, layerIdx+1)
+}
+
+// GradFunc calculates network gradient at point x
+func (n *Network) GradFunc(gradient []float64, netWeights []float64,
+	x *mat64.Dense, y *mat64.Vector, labels int, lambda float64) []float64 {
+	// network layers and layer count
+	layers := n.Layers()
+	layerCount := len(layers)
+	// Init net layers
+	acc := 0
+	for _, layer := range layers[1:] {
+		r, c := layer.Weights().Dims()
+		vec2Mx(netWeights[acc:(acc+r*c)], layer.Weights(), false)
+		acc += r * c
+	}
+	// dimensions of input matrix
+	samples, _ := x.Dims()
+	// make labels matrix
+	labelsMx := makeLabelsMx(y, samples, labels)
+	// iterate through all samples and calculate errors and corrections
+	for i := 0; i < samples; i++ {
+		// pick a sample
+		inSample := x.RowView(i)
+		// pick the expected output
+		expOutput := labelsMx.RowView(i)
+		// pick actual output from output layer
+		output := layers[layerCount-1].Out().RowView(i)
+		// calculate the error = out - y
+		output.SubVec(output, expOutput)
+		// run the backpropagation
+		n.backProp(inSample.T(), output.T(), layerCount-1, layerCount-2, i)
+	}
+	// zero-th layer is INPUT layer and has no Deltas
+	next := 0
+	for i := 1; i < layerCount; i++ {
+		deltas := layers[i].Deltas()
+		deltas.Scale(1/float64(samples), deltas)
+		if lambda > 0 {
+			gradMx := n.gradientReg(i, lambda, samples)
+			gradMx.Add(deltas, gradMx)
+			r, c := gradMx.Dims()
+			gradVec := mx2Vec(gradMx, false)
+			for j := 0; j < len(gradVec); j++ {
+				gradient[next+j] = gradVec[j]
+			}
+			next += r * c
+		}
+	}
+	return gradient
+}
+
+// GradFuncReg calculates gradient regularizer for a particular layer identified by index idx
+func (n *Network) gradientReg(idx int, lambda float64, samples int) *mat64.Dense {
+	layers := n.Layers()
+	layer := layers[idx]
+	r, c := layer.Weights().Dims()
+	// initialize weights
+	regWeights := mat64.NewDense(r, c, nil)
+	if lambda > 0 {
+		// calculate the regularizer
+		reg := lambda / float64(samples)
+		regWeights.Clone(layer.Weights())
+		// set the first column to 0
+		zeros := make([]float64, r)
+		regWeights.SetCol(0, zeros)
+		regWeights.Scale(reg, regWeights)
+	}
+	return regWeights
 }
 
 // backProp implements Neural Network back propagation and calculates feed forward prop errors
@@ -303,65 +455,6 @@ func (n *Network) backProp(inMx, deltaMx mat64.Matrix,
 	return n.backProp(inMx, sigGradOut, layerIdx-1, outIdx-1, sampleIdx)
 }
 
-// Gradient calculates network gradient at point x
-func (n *Network) Gradient(gradient []float64, x *mat64.Dense, y *mat64.Vector,
-	labels int, lambda float64) []float64 {
-	// network layers
-	layers := n.Layers()
-	layerCount := len(layers)
-	// dimensions of input matrix
-	samples, _ := x.Dims()
-	// make labels matrix
-	labelsMx := makeLabelsMx(y, samples, labels)
-	// iterate through all samples and calculate errors and corrections
-	for i := 0; i < samples; i++ {
-		// pick a sample
-		inSample := x.RowView(i)
-		// pick the expected output
-		expOutput := labelsMx.RowView(i)
-		// pick actual output from output layer
-		output := layers[layerCount-1].Out().RowView(i)
-		// calculate the error = out - y
-		output.SubVec(output, expOutput)
-		// run the backpropagation
-		n.backProp(inSample.T(), output.T(), layerCount-1, layerCount-2, i)
-	}
-	// zero-th layer is INPUT layer and has no Deltas
-	next := 0
-	for i := 1; i < len(layers); i++ {
-		deltas := layers[i].Deltas()
-		deltas.Scale(1/float64(samples), deltas)
-		gradMx := n.GradientReg(i, lambda, samples)
-		gradMx.Add(deltas, gradMx)
-		r, c := gradMx.Dims()
-		gradVec := mx2Vec(gradMx)
-		for j := 0; j < len(gradVec); j++ {
-			gradient[next+j] = gradVec[j]
-		}
-		next += r * c
-	}
-	return gradient
-}
-
-// GradientReg calculates gradient regularizer for a particular layer identified by index idx
-func (n *Network) GradientReg(idx int, lambda float64, samples int) *mat64.Dense {
-	layers := n.Layers()
-	layer := layers[idx]
-	r, c := layer.Weights().Dims()
-	// initialize weights
-	regWeights := mat64.NewDense(r, c, nil)
-	if lambda > 0 {
-		// calculate the regularizer
-		reg := lambda / float64(samples)
-		regWeights.Clone(layer.Weights())
-		// set the first column to 0
-		zeros := make([]float64, r)
-		regWeights.SetCol(0, zeros)
-		regWeights.Scale(reg, regWeights)
-	}
-	return regWeights
-}
-
 // Predict classifies the provided data vector to particular label
 // It returns the label number or error
 func (n *Network) Predict(x *mat64.Vector) (int, error) {
@@ -370,8 +463,24 @@ func (n *Network) Predict(x *mat64.Vector) (int, error) {
 
 // Validate runs Neural Net validation through the provided training set and returns
 // percentage of successful classifications or error
-func (n *Network) Validate(x *mat64.Dense) (float64, error) {
-	return 0.0, nil
+func (n *Network) Validate(x *mat64.Dense, y *mat64.Vector) (float64, error) {
+	outputMx, _ := n.forwardProp(x, 0)
+	rows, _ := outputMx.Dims()
+	hits := 0.0
+	for i := 0; i < rows; i++ {
+		row := outputMx.RowView(i)
+		max := mat64.Max(row)
+		for j := 0; j < row.Len(); j++ {
+			if row.At(j, 0) == max {
+				if j+1 == int(y.At(i, 0)) {
+					hits++
+					break
+				}
+			}
+		}
+	}
+	success := (hits / float64(y.Len())) * 100
+	return success, nil
 }
 
 // Layers returns a slice of netowrk layers

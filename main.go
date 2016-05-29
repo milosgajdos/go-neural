@@ -4,7 +4,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"runtime/pprof"
 )
 
 var (
@@ -14,12 +16,18 @@ var (
 	reqScale bool
 	// number of labels
 	labels int
+	// number of iterations
+	iters int
+	// regularization parameter
+	lambda float64
 )
 
 func init() {
 	flag.StringVar(&dataPath, "data", "", "Path to training data set")
 	flag.BoolVar(&reqScale, "scale", false, "Require data scaling")
 	flag.IntVar(&labels, "labels", 0, "Number of class labels")
+	flag.IntVar(&iters, "iters", 50, "Number of iterations")
+	flag.Float64Var(&lambda, "lambda", 1.0, "Regularization parameter")
 }
 
 func parseCliFlags() error {
@@ -32,6 +40,12 @@ func parseCliFlags() error {
 }
 
 func main() {
+	f, err := os.Create("nn.profile")
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
 	// parse cli parameters
 	if err := parseCliFlags(); err != nil {
 		fmt.Printf("Error parsing cli flags: %s\n", err)
@@ -53,6 +67,7 @@ func main() {
 	// Create new Neural Network:
 	hiddenLayerSize := uint(25)
 	// TODO: what happens if outputLayerSize > nrLabels - check the code
+	// OutputLayer size MUST be at least as big as nrLabels
 	outputLayerSize := uint(labels)
 	if outputLayerSize != uint(labels) {
 		fmt.Printf("Output layer must be same as number of labels\n")
@@ -65,10 +80,14 @@ func main() {
 		os.Exit(1)
 	}
 	// Train the network and return the cost value
-	cost, err := nn.Train(featMx, labelVec, labels, 1.0, 50)
-	if err != nil {
+	if _, err := nn.Train(featMx, labelVec, labels, lambda, iters); err != nil {
 		fmt.Printf("Unable to train %s network: %s\n", nn.Kind(), err)
 		os.Exit(1)
 	}
-	fmt.Printf("Cost: \n%f\n", cost)
+	success, err := nn.Validate(featMx, labelVec)
+	if err != nil {
+		fmt.Printf("UNable to calculate success rate: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Neural net success: %f\n", success)
 }
