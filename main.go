@@ -90,4 +90,13 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Neural net success: %f\n", success)
+	//sample := featMx.RowView(0)
+	//expect := labelVec.At(0, 0)
+	//class := nn.Classify(sample)
+	//fmt.Printf("Sample classified as: %d\n", class)
+	//if class != int(expect) {
+	//	fmt.Println("Miss!")
+	//} else {
+	//	fmt.Println("Hit!")
+	//}
 }

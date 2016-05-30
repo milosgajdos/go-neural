@@ -274,7 +274,8 @@ func (n *Network) CostFunc(netWeights []float64, x *mat64.Dense, y *mat64.Vector
 	// number of data samples
 	samples, _ := x.Dims()
 	// run forward propagation - start from INPUT layer
-	outputMx, _ := n.forwardProp(x, 0)
+	output, _ := n.forwardProp(x, 0)
+	outputMx := output.(*mat64.Dense)
 	// each row represents the expected (label) result
 	// i.e. label 3 will turn into vector 0 0 1 0 0 0...
 	labelsMx := makeLabelsMx(y, samples, labels)
@@ -324,16 +325,16 @@ func (n *Network) costReg(lambda float64, samples int) (cost float64) {
 
 // feedForward recursively progresses Neural Network
 // TODO: figure out how to return mat64.Matrix
-func (n *Network) forwardProp(inMx mat64.Matrix, layerIdx int) (*mat64.Dense, int) {
+func (n *Network) forwardProp(inMx mat64.Matrix, layerIdx int) (mat64.Matrix, int) {
 	layers := n.Layers()
 	if layerIdx > len(layers)-1 {
-		return inMx.(*mat64.Dense), layerIdx
+		return inMx, layerIdx
 	}
 	// compute activations
 	layer := layers[layerIdx]
 	// calcualte the output of the layer
 	out := new(mat64.Dense)
-	out.Clone(layer.CompOut(inMx.(*mat64.Dense)))
+	out.Clone(layer.CompOut(inMx))
 	return n.forwardProp(out, layerIdx+1)
 }
 
@@ -455,16 +456,25 @@ func (n *Network) backProp(inMx, deltaMx mat64.Matrix,
 	return n.backProp(inMx, sigGradOut, layerIdx-1, outIdx-1, sampleIdx)
 }
 
-// Predict classifies the provided data vector to particular label
+// Classify classifies the provided data vector to particular label
 // It returns the label number or error
-func (n *Network) Predict(x *mat64.Vector) (int, error) {
-	return 0, nil
+func (n *Network) Classify(x *mat64.Vector) int {
+	output, _ := n.forwardProp(x, 0)
+	rows, _ := output.Dims()
+	max := mat64.Max(output)
+	for i := 0; i < rows; i++ {
+		if output.At(i, 0) == max {
+			return i
+		}
+	}
+	return 0
 }
 
 // Validate runs Neural Net validation through the provided training set and returns
 // percentage of successful classifications or error
 func (n *Network) Validate(x *mat64.Dense, y *mat64.Vector) (float64, error) {
-	outputMx, _ := n.forwardProp(x, 0)
+	output, _ := n.forwardProp(x, 0)
+	outputMx := output.(*mat64.Dense)
 	rows, _ := outputMx.Dims()
 	hits := 0.0
 	for i := 0; i < rows; i++ {
@@ -519,9 +529,10 @@ func (lk LayerKind) String() string {
 // It has id and a list of Neurons. It has a matrix of neuron weights
 // Layer can be of three different kinds: input, hidden or output
 type Layer struct {
-	id       uint
-	kind     LayerKind
-	net      *Network
+	id   uint
+	kind LayerKind
+	net  *Network
+	// TODO: turn these to mat64.Matrix-es
 	out      *mat64.Dense
 	actIn    *mat64.Dense
 	weights  *mat64.Dense
@@ -600,11 +611,11 @@ func (l *Layer) SetDeltas(deltas *mat64.Dense) error {
 }
 
 // Out calculates matrix of output for a particular inputMx
-func (l *Layer) CompOut(inputMx *mat64.Dense) *mat64.Dense {
+func (l *Layer) CompOut(inputMx mat64.Matrix) *mat64.Dense {
 	// if it's INPUT layer, output is input
 	if l.kind == INPUT {
-		l.out = inputMx
-		return inputMx
+		l.out = inputMx.(*mat64.Dense)
+		return inputMx.(*mat64.Dense)
 	}
 	// add bias to input
 	biasInMx := addBias(inputMx)
