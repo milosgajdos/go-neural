@@ -4,9 +4,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
-	"runtime/pprof"
+
+	"github.com/milosgajdos83/go-neural/dataset"
 )
 
 var (
@@ -40,25 +40,19 @@ func parseCliFlags() error {
 }
 
 func main() {
-	f, err := os.Create("nn.profile")
-	if err != nil {
-		log.Fatal(err)
-	}
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
 	// parse cli parameters
 	if err := parseCliFlags(); err != nil {
 		fmt.Printf("Error parsing cli flags: %s\n", err)
 		os.Exit(1)
 	}
-	// load training data set
-	dataMx, err := LoadCSVData(dataPath)
+	// load new data set from provided file
+	ds, err := dataset.New(path)
 	if err != nil {
-		fmt.Printf("Error loading data: %s\n", err)
+		fmt.Println("Unable to create new Data Set: %s\n", err)
 		os.Exit(1)
 	}
-	// extract features and labels from raw data matrix
-	featMx, labelVec, err := ExtractFeatures(dataMx)
+	// extract features and labels from the loaded data set
+	featMx, labelVec, err := ExtractFeatures(ds.Data())
 	if err != nil {
 		fmt.Printf("Could not extract features: %s\n", err)
 		os.Exit(1)
