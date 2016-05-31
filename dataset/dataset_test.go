@@ -19,7 +19,7 @@ var (
 
 func setup() {
 	// create a correct test file
-	content := []byte("1,2,3")
+	content := []byte("2.0,3.5\n4.5,5.5\n7.0,9.0")
 	tmpPath := filepath.Join(os.TempDir(), fileName)
 	if err := ioutil.WriteFile(tmpPath, content, 0666); err != nil {
 		log.Fatal(err)
@@ -51,8 +51,8 @@ func TestDataSet(t *testing.T) {
 	assert.NotNil(ds)
 	mx := ds.Data()
 	rows, cols := mx.Dims()
-	assert.Equal(1, rows)
-	assert.Equal(3, cols)
+	assert.Equal(3, rows)
+	assert.Equal(2, cols)
 
 	// Unsupported file format
 	tmpfile, err := ioutil.TempFile("", "example")
@@ -65,6 +65,23 @@ func TestDataSet(t *testing.T) {
 	fileName3 := "nonexistent.csv"
 	ds, err = NewDataSet(path.Join(".", fileName3))
 	assert.Error(err)
+}
+
+func TestScale(t *testing.T) {
+	assert := assert.New(t)
+
+	tmpPath := path.Join(os.TempDir(), fileName)
+	ds, err := NewDataSet(tmpPath)
+	assert.NoError(err)
+	assert.NotNil(ds)
+	scaled := []float64{
+		-1, -0.8980265101338746,
+		0, -0.1796053020267749,
+		1, 1.0776318121606494,
+	}
+	scaledMx := mat64.NewDense(3, 2, scaled)
+	ds.Scale()
+	assert.True(mat64.Equal(ds.Data(), scaledMx))
 }
 
 func TestLoadCSV(t *testing.T) {
@@ -105,10 +122,10 @@ func TestExtractFeatures(t *testing.T) {
 	features, labels, err := ExtractFeatures(mx)
 	assert.NoError(err)
 	r, c := features.Dims()
-	assert.Equal(r, 1)
-	assert.Equal(c, 2)
+	assert.Equal(r, 3)
+	assert.Equal(c, 1)
 	r, c = labels.Dims()
-	assert.Equal(r, 1)
+	assert.Equal(r, 3)
 	assert.Equal(c, 1)
 
 	// can't extract features from vector
