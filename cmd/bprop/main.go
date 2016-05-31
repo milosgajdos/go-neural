@@ -11,11 +11,11 @@ import (
 
 var (
 	// path to the training data set
-	dataPath string
+	data string
+	// is the data set labeled
+	labels bool
 	// do we want to normalize data
-	reqScale bool
-	// number of labels
-	labels int
+	scale bool
 	// number of iterations
 	iters int
 	// regularization parameter
@@ -23,9 +23,9 @@ var (
 )
 
 func init() {
-	flag.StringVar(&dataPath, "data", "", "Path to training data set")
-	flag.BoolVar(&reqScale, "scale", false, "Require data scaling")
-	flag.IntVar(&labels, "labels", 0, "Number of class labels")
+	flag.StringVar(&data, "data", "", "Path to training data set")
+	flag.BoolVar(&labels, "labels", false, "Is the data set labeled")
+	flag.BoolVar(&scale, "scale", false, "Require data scaling")
 	flag.IntVar(&iters, "iters", 50, "Number of iterations")
 	flag.Float64Var(&lambda, "lambda", 1.0, "Regularization parameter")
 }
@@ -33,7 +33,7 @@ func init() {
 func parseCliFlags() error {
 	flag.Parse()
 	// path to training data is mandatory
-	if dataPath == "" {
+	if data == "" {
 		return errors.New("You must specify the path to training data set")
 	}
 	return nil
@@ -46,51 +46,21 @@ func main() {
 		os.Exit(1)
 	}
 	// load new data set from provided file
-	ds, err := dataset.New(path)
+	ds, err := dataset.NewDataSet(data, labels)
 	if err != nil {
-		fmt.Println("Unable to create new Data Set: %s\n", err)
+		fmt.Println("Unable to load Data Set: %s\n", err)
 		os.Exit(1)
 	}
-	// extract features and labels from the loaded data set
-	featMx, labelVec, err := ExtractFeatures(ds.Data())
-	if err != nil {
-		fmt.Printf("Could not extract features: %s\n", err)
+	// extract features from data set
+	features := ds.Features()
+	// if we require features scaling, scale data
+	if scale {
+		features = dataset.Scale(features)
+	}
+	// extract labels
+	labels := ds.Labels()
+	if labels == nil {
+		fmt.Println("No labels available for supervised learning")
 		os.Exit(1)
 	}
-	_, featCount := featMx.Dims()
-	// Create new Neural Network:
-	hiddenLayerSize := uint(25)
-	// TODO: what happens if outputLayerSize > nrLabels - check the code
-	// OutputLayer size MUST be at least as big as nrLabels
-	outputLayerSize := uint(labels)
-	if outputLayerSize != uint(labels) {
-		fmt.Printf("Output layer must be same as number of labels\n")
-		os.Exit(1)
-	}
-	layers := []uint{uint(featCount), hiddenLayerSize, outputLayerSize}
-	nn, err := NewNetwork(FEEDFWD, layers)
-	if err != nil {
-		fmt.Printf("Unable to initialize %s Neural network: %s\n", FEEDFWD, err)
-		os.Exit(1)
-	}
-	// Train the network and return the cost value
-	if _, err := nn.Train(featMx, labelVec, labels, lambda, iters); err != nil {
-		fmt.Printf("Unable to train %s network: %s\n", nn.Kind(), err)
-		os.Exit(1)
-	}
-	success, err := nn.Validate(featMx, labelVec)
-	if err != nil {
-		fmt.Printf("UNable to calculate success rate: %s\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("Neural net success: %f\n", success)
-	//sample := featMx.RowView(0)
-	//expect := labelVec.At(0, 0)
-	//class := nn.Classify(sample)
-	//fmt.Printf("Sample classified as: %d\n", class)
-	//if class != int(expect) {
-	//	fmt.Println("Miss!")
-	//} else {
-	//	fmt.Println("Hit!")
-	//}
 }

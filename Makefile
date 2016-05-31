@@ -2,7 +2,7 @@ BUILD=go build
 CLEAN=go clean
 INSTALL=go install
 SRCPATH=./cmd
-BUILDPATH=./build
+BUILDPATH=./_build
 
 bprop: build
 	$(BUILD) -v -o $(BUILDPATH)/bprop $(SRCPATH)/bprop

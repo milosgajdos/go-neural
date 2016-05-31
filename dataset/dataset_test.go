@@ -46,42 +46,100 @@ func TestDataSet(t *testing.T) {
 	assert := assert.New(t)
 
 	tmpPath := path.Join(os.TempDir(), fileName)
-	ds, err := NewDataSet(tmpPath)
+	ds, err := NewDataSet(tmpPath, true)
 	assert.NoError(err)
 	assert.NotNil(ds)
+	assert.True(ds.IsLabeled())
+	// retrieve data and check dimensions
 	mx := ds.Data()
 	rows, cols := mx.Dims()
 	assert.Equal(3, rows)
 	assert.Equal(2, cols)
+	// unlabeled data
+	ds, err = NewDataSet(tmpPath, false)
+	assert.NoError(err)
+	assert.NotNil(ds)
+	assert.False(ds.IsLabeled())
 
 	// Unsupported file format
 	tmpfile, err := ioutil.TempFile("", "example")
 	defer os.Remove(tmpfile.Name())
 	assert.NoError(err)
-	ds, err = NewDataSet(tmpfile.Name())
+	ds, err = NewDataSet(tmpfile.Name(), true)
 	assert.Error(err)
 
 	// Nonexistent file
 	fileName3 := "nonexistent.csv"
-	ds, err = NewDataSet(path.Join(".", fileName3))
+	ds, err = NewDataSet(path.Join(".", fileName3), true)
 	assert.Error(err)
+}
+
+func TestFeaturesLabels(t *testing.T) {
+	assert := assert.New(t)
+
+	// read data from temp file
+	tmpPath := path.Join(os.TempDir(), fileName)
+	ds, err := NewDataSet(tmpPath, true)
+	assert.NoError(err)
+	assert.NotNil(ds)
+
+	// extract features from loaded data set
+	features := ds.Features()
+	assert.NotNil(features)
+	r, c := features.Dims()
+	assert.Equal(r, 3)
+	assert.Equal(c, 1)
+	// extract labels from loaded data set
+	labels := ds.Labels()
+	assert.NotNil(labels)
+	r, c = labels.Dims()
+	assert.Equal(r, 3)
+	assert.Equal(c, 1)
+
+	// can't extract features from vector
+	ds, err = NewDataSet(tmpPath, false)
+	assert.NoError(err)
+	assert.NotNil(ds)
+	// features must be equal to Data
+	features = ds.Features()
+	assert.True(mat64.Equal(features, ds.Data()))
+	// labels must be nil
+	labels = ds.Labels()
+	assert.Nil(labels)
+
+	// only one column data in labeled data set
+	content := []byte("2.0")
+	tmpPath = filepath.Join(os.TempDir(), "tst.csv")
+	err = ioutil.WriteFile(tmpPath, content, 0666)
+	assert.NoError(err)
+	ds, err = NewDataSet(tmpPath, true)
+	assert.NoError(err)
+	assert.NotNil(ds)
+	// features are the same as raw data
+	features = ds.Features()
+	assert.True(mat64.Equal(features, ds.Data()))
+	// labels must be nil
+	labels = ds.Labels()
+	assert.Nil(labels)
 }
 
 func TestScale(t *testing.T) {
 	assert := assert.New(t)
 
+	// unlabeled data set
 	tmpPath := path.Join(os.TempDir(), fileName)
-	ds, err := NewDataSet(tmpPath)
+	ds, err := NewDataSet(tmpPath, false)
 	assert.NoError(err)
 	assert.NotNil(ds)
+	features := ds.Features()
 	scaled := []float64{
 		-1, -0.8980265101338746,
 		0, -0.1796053020267749,
 		1, 1.0776318121606494,
 	}
 	scaledMx := mat64.NewDense(3, 2, scaled)
-	ds.Scale()
-	assert.True(mat64.Equal(ds.Data(), scaledMx))
+	scaledFeats := Scale(features)
+	assert.True(mat64.Equal(scaledFeats, scaledMx))
 }
 
 func TestLoadCSV(t *testing.T) {
@@ -106,39 +164,4 @@ func TestLoadCSV(t *testing.T) {
 	mx, err = LoadCSV(tstRdr)
 	assert.Error(err)
 	assert.Nil(mx)
-}
-
-func TestExtractFeatures(t *testing.T) {
-	assert := assert.New(t)
-
-	// read data from temp file
-	tmpPath := path.Join(os.TempDir(), fileName)
-	ds, err := NewDataSet(tmpPath)
-	assert.NoError(err)
-	assert.NotNil(ds)
-	mx := ds.Data()
-
-	// extract features from loaded data set
-	features, labels, err := ExtractFeatures(mx)
-	assert.NoError(err)
-	r, c := features.Dims()
-	assert.Equal(r, 3)
-	assert.Equal(c, 1)
-	r, c = labels.Dims()
-	assert.Equal(r, 3)
-	assert.Equal(c, 1)
-
-	// can't extract features from vector
-	tstVec := mat64.NewVector(2, nil)
-	features, labels, err = ExtractFeatures(tstVec)
-	assert.Nil(features)
-	assert.Nil(labels)
-	assert.Error(err)
-
-	// dimensions of data matrix are too low
-	tstMx := mat64.NewDense(1, 1, nil)
-	features, labels, err = ExtractFeatures(tstMx)
-	assert.Nil(features)
-	assert.Nil(labels)
-	assert.Error(err)
 }

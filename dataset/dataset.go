@@ -2,7 +2,6 @@ package dataset
 
 import (
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,15 +17,17 @@ var loadFuncs = map[string]func(io.Reader) (*mat64.Dense, error){
 	".csv": LoadCSV,
 }
 
-// Data represents training data set
+// DataSet represents training data set
 type DataSet struct {
-	mx mat64.Matrix
+	mx      mat64.Matrix
+	labeled bool
 }
 
-// NewData returns *Data or fails with error if either the path to data set
+// NewDataSet returns *Data or fails with error if either the path to data set
 // supplied as a parameter does not exist or if the data set file is encoded
 // in an unsupported file format. File format is inferred from the file extension.
-func NewDataSet(path string) (*DataSet, error) {
+// You can specify if the data set is labeled or not
+func NewDataSet(path string, labeled bool) (*DataSet, error) {
 	// Check if the training data file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, err
@@ -50,34 +51,52 @@ func NewDataSet(path string) (*DataSet, error) {
 	}
 	// Return Data
 	return &DataSet{
-		mx: mx,
+		mx:      mx,
+		labeled: labeled,
 	}, nil
 }
 
-// Matrix returns the data set represented as matrix
+// IsLabeled returns true if the loaded data set contains labels
+// Labels are assumed to be in the last column of the data matrix
+func (ds DataSet) IsLabeled() bool {
+	return ds.labeled
+}
+
+// Data returns the data set represented as matrix
 func (ds DataSet) Data() mat64.Matrix {
 	return ds.mx
 }
 
-// Scale centers the data set to zero mean values and scales each column.
-// It modifies the data stored in the data set. If your data contains also
-// labeles in the last column, make sure you extract it before scaling.
-func (ds *DataSet) Scale() {
-	rows, cols := ds.mx.Dims()
-	// mean/stdev store each column mean/stdev values
-	col := make([]float64, rows)
-	mean := make([]float64, cols)
-	stdev := make([]float64, cols)
-	for i := 0; i < cols; i++ {
-		// copy i-th column to col
-		mat64.Col(col, i, ds.mx)
-		mean[i], stdev[i] = stat.MeanStdDev(col, nil)
+// Features returns features matrix from the underlying data matrix
+// Data features are considered to be stored in all but the last column of
+// the dataset matrix if the data set is labeled.
+/// If the dataset is not labeled Features returns the raw data matrix
+func (ds DataSet) Features() mat64.Matrix {
+	if !(ds.labeled) {
+		return ds.mx
 	}
-	scale := func(i, j int, x float64) float64 {
-		return (x - mean[j]) / stdev[j]
+	// get matrix dimensions
+	rows, cols := ds.mx.Dims()
+	if cols == 1 {
+		return ds.mx
+	}
+	// turn mat64.Matrix into mat64.Dense matrix
+	dataMx := ds.mx.(*mat64.Dense)
+	return dataMx.View(0, 0, rows, cols-1)
+}
+
+// Labels returns data labels from the raw data.
+// If the data set is not labeled or if it only contains one columne it returns nil
+func (ds DataSet) Labels() mat64.Matrix {
+	if !(ds.labeled) {
+		return nil
+	}
+	_, cols := ds.mx.Dims()
+	if cols == 1 {
+		return nil
 	}
 	dataMx := ds.mx.(*mat64.Dense)
-	dataMx.Apply(scale, dataMx)
+	return dataMx.ColView(cols - 1)
 }
 
 // LoadCSV loads training set from the path supplied as a parameter.
@@ -88,7 +107,7 @@ func LoadCSV(r io.Reader) (*mat64.Dense, error) {
 	// data matrix dimensions: rows x cols
 	var rows, cols int
 	// mxData contains ALL data read field by field
-	mxData := make([]float64, 0)
+	var mxData []float64
 	// create new CSV reader
 	csvReader := csv.NewReader(r)
 	// read all data record by record
@@ -120,31 +139,32 @@ func LoadCSV(r io.Reader) (*mat64.Dense, error) {
 			// append the read data into mxData
 			mxData = append(mxData, f)
 		}
-		rows += 1
+		rows++
 	}
 	// Initialize data matrix with the read data
 	mx := mat64.NewDense(rows, cols, mxData)
 	return mx, nil
 }
 
-// ExtractFeatures extracts features and labels from data matrix
-// It returns features matrix and vector of data labels
-// It returns error if the features can not be extracted
-func ExtractFeatures(mx mat64.Matrix) (*mat64.Dense, *mat64.Vector, error) {
-	// get matrix dimensions
+// Scale centers the data set to zero mean values and scales each column.
+// It modifies the data stored in the data set. If your data contains also
+// labeles in the last column, make sure you extract it before scaling.
+func Scale(mx mat64.Matrix) mat64.Matrix {
 	rows, cols := mx.Dims()
-	if cols == 1 {
-		return nil, nil, fmt.Errorf("Insufficient number of columns: %d\n", cols)
+	// mean/stdev store each column mean/stdev values
+	col := make([]float64, rows)
+	mean := make([]float64, cols)
+	stdev := make([]float64, cols)
+	for i := 0; i < cols; i++ {
+		// copy i-th column to col
+		mat64.Col(col, i, mx)
+		mean[i], stdev[i] = stat.MeanStdDev(col, nil)
 	}
-	// makes sure the passed in matrix is a Dense matrix
-	dataMx, ok := mx.(*mat64.Dense)
-	if !ok {
-		return nil, nil, errors.New("Passed in matrix must be of type *mat64.Dense")
+	scale := func(i, j int, x float64) float64 {
+		return (x - mean[j]) / stdev[j]
 	}
-	// last column contains labels
-	labels := dataMx.ColView(cols - 1)
-	// features are stored in all but the last column
-	features := dataMx.View(0, 0, rows, cols-1)
-	// return extracted data
-	return features.(*mat64.Dense), labels, nil
+	dataMx := new(mat64.Dense)
+	dataMx.Clone(mx)
+	dataMx.Apply(scale, dataMx)
+	return dataMx
 }
