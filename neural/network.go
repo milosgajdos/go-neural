@@ -1,14 +1,14 @@
-package main
+package neural
 
 import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 
 	"github.com/gonum/matrix/mat64"
 	"github.com/gonum/optimize"
+	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
 
 const (
@@ -34,120 +34,6 @@ func randomString(size int) string {
 		bytes[i] = alphanum[b%byte(len(alphanum))]
 	}
 	return string(bytes)
-}
-
-// addBias adds a bias vector to matrix x and returns the new matrix
-func addBias(x mat64.Matrix) *mat64.Dense {
-	rows, cols := x.Dims()
-	// Initiate bias vector with 1.0s
-	ones := make([]float64, rows)
-	for i, _ := range ones {
-		ones[i] = 1.0
-	}
-	// create bias vector
-	biasVec := mat64.NewVector(rows, ones)
-	// create new matrix that will contain bias
-	biasMx := mat64.NewDense(rows, cols+1, nil)
-	// Add bias to matrix x
-	biasMx.Augment(biasVec, x)
-	return biasMx
-}
-
-// ones returns a matrix of rows x cols filled with 1.0
-func ones(rows, cols int) (*mat64.Dense, error) {
-	if rows <= 0 || cols <= 0 {
-		return nil, errors.New("Rows and columns must be positive integer")
-	}
-	onesMx := mat64.NewDense(rows, cols, nil)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			onesMx.Set(i, j, 1.0)
-		}
-	}
-	return onesMx, nil
-}
-
-func makeLabelsMx(y *mat64.Vector, samples, labels int) *mat64.Dense {
-	mx := mat64.NewDense(samples, labels, nil)
-	for i := 0; i < y.Len(); i++ {
-		val := y.At(i, 0)
-		mx.Set(i, int(val)-1, 1.0)
-	}
-	return mx
-}
-
-func makeRandMx(rows, cols uint, min, max float64) *mat64.Dense {
-	// set random seed
-	rand.Seed(55)
-	// empirically this is supposed to be the best value
-	epsilon := math.Sqrt(6.0) / math.Sqrt(float64(rows+cols))
-	// allocate data slice
-	randVals := make([]float64, rows*cols)
-	for i := range randVals {
-		// we need value between 0 and 1.0
-		randVals[i] = rand.Float64()*(max-min) + min
-		randVals[i] = randVals[i]*(2*epsilon) - epsilon
-	}
-	return mat64.NewDense(int(rows), int(cols), randVals)
-}
-
-// mx2Vec turns matrix to slice/vector
-func mx2Vec(m *mat64.Dense, byRow bool) []float64 {
-	if byRow {
-		return mxByRow(m)
-	}
-	return mxByCol(m)
-}
-
-func mxByRow(mx *mat64.Dense) []float64 {
-	rows, cols := mx.Dims()
-	vector := make([]float64, rows*cols)
-	for i := 0; i < rows; i++ {
-		view := mx.RowView(i)
-		for j := 0; j < view.Len(); j++ {
-			vector[i*cols+j] = view.At(j, 0)
-		}
-	}
-	return vector
-}
-
-func mxByCol(mx *mat64.Dense) []float64 {
-	rows, cols := mx.Dims()
-	vector := make([]float64, rows*cols)
-	for i := 0; i < cols; i++ {
-		view := mx.ColView(i)
-		for j := 0; j < view.Len(); j++ {
-			vector[i*rows+j] = view.At(j, 0)
-		}
-	}
-	return vector
-}
-
-// vec2Mx copies vector into matrix
-func vec2Mx(vec []float64, mx *mat64.Dense, byRow bool) {
-	if byRow {
-		vecByRow(vec, mx)
-		return
-	}
-	vecByCol(vec, mx)
-}
-
-func vecByCol(vec []float64, mx *mat64.Dense) {
-	rows, cols := mx.Dims()
-	acc := 0
-	for i := 0; i < cols; i++ {
-		mx.SetCol(i, vec[acc:(acc+rows)])
-		acc += rows
-	}
-}
-
-func vecByRow(vec []float64, mx *mat64.Dense) {
-	rows, cols := mx.Dims()
-	acc := 0
-	for i := 0; i < rows; i++ {
-		mx.SetRow(i, vec[acc:(acc+cols)])
-		acc += cols
-	}
 }
 
 // Kind of a Network Layer
@@ -424,13 +310,13 @@ func (n *Network) backProp(inMx, deltaMx mat64.Matrix,
 	if outIdx == 0 {
 		dMx := new(mat64.Dense)
 		// inMx is the same as bpOutMx(i)
-		biasInMx := addBias(inMx)
+		biasInMx := matrix.AddBias(inMx)
 		dMx.Mul(deltaMx.T(), biasInMx)
 		bpDeltasMx.Add(bpDeltasMx, dMx)
 		return bpDeltasMx, layerIdx
 	}
 	// add bias to Out matrix
-	biasOutMx := addBias(bpOutMx)
+	biasOutMx := matrix.AddBias(bpOutMx)
 	// Just pick the first row
 	outSample := biasOutMx.RowView(sampleIdx).T()
 	// delta_i'*a_(i-1)
@@ -618,7 +504,7 @@ func (l *Layer) CompOut(inputMx mat64.Matrix) *mat64.Dense {
 		return inputMx.(*mat64.Dense)
 	}
 	// add bias to input
-	biasInMx := addBias(inputMx)
+	biasInMx := matrix.AddBias(inputMx)
 	// otherwise apply weights
 	actIn := new(mat64.Dense)
 	actIn.Mul(biasInMx, l.weights.T())
