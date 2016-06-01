@@ -76,7 +76,7 @@ func MakeRandMx(rows, cols int, min, max float64) (*mat64.Dense, error) {
 		randVals[i] = rand.Float64()*(max-min) + min
 		randVals[i] = randVals[i]*(2*epsilon) - epsilon
 	}
-	return mat64.NewDense(int(rows), int(cols), randVals), nil
+	return mat64.NewDense(rows, cols, randVals), nil
 }
 
 // Mx2Vec unrolls all elements of matrix into a slice and returns it.
