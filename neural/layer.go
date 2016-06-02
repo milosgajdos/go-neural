@@ -69,7 +69,7 @@ func NewLayer(layerKind LayerKind, net *Network, layerIn, layerOut int) (*Layer,
 		return nil, fmt.Errorf("Invalid layer size requested: %d, %d\n", layerIn, layerOut)
 	}
 	// Layer must belong to an existing Neural Network
-	if net == nil {
+	if net == nil || net.ID() == "" {
 		return nil, fmt.Errorf("Invalid neural network: %v\n", net)
 	}
 	// Layer kind must be valid
@@ -118,6 +118,7 @@ func (l *Layer) Weights() *mat64.Dense {
 // It fails with error if the supplied weights have different dimension
 // than the existing layer weights or if the passed in weights matrix is nil
 // or if the layer is an INPUT layer: INPUT layer has no weights matrix.
+// SetWeights also modifies Deltas matrix to adjust it to the new weights dimensions.
 func (l *Layer) SetWeights(w *mat64.Dense) error {
 	// INPUT layer has no weights
 	if l.kind == INPUT {
@@ -135,6 +136,9 @@ func (l *Layer) SetWeights(w *mat64.Dense) error {
 			lr, lc, wr, wc)
 	}
 	l.weights = w
+	// We must re-allocate deltas too
+	deltas := mat64.NewDense(wr, wc, nil)
+	l.deltas = deltas
 	return nil
 }
 
@@ -146,9 +150,19 @@ func (l *Layer) Deltas() *mat64.Dense {
 // Out calculates output of the network layer for the given input
 // If the layer is INPUT layer, it returns the supplied input argument.
 func (l *Layer) Out(inputMx mat64.Matrix) (*mat64.Dense, error) {
+	// if input is nil, return error
+	if inputMx == nil {
+		return nil, fmt.Errorf("Can't calculate output for %v input\n", inputMx)
+	}
 	// if it's INPUT layer, output is input
 	if l.kind == INPUT {
 		return inputMx.(*mat64.Dense), nil
+	}
+	// input column dimensions + bias must match the weights column dimensions
+	_, inCols := inputMx.Dims()
+	_, wCols := l.weights.Dims()
+	if inCols+1 != wCols {
+		return nil, fmt.Errorf("Dimension mismatch. Weights: %d, Input: %d\n", wCols, inCols)
 	}
 	// add bias to input
 	biasInMx, err := matrix.AddBias(inputMx)
@@ -169,6 +183,17 @@ func (l Layer) NeuronFunc() *NeuronFunc {
 }
 
 // SetNeuronFunc allows to set the layer's NeuronFunc
-func (l *Layer) SetNeuronFunc(nf *NeuronFunc) {
+// It fails with error if either the supplied function is nil or
+// the layer you are trying to change neuron function to is INPUT layer.
+func (l *Layer) SetNeuronFunc(nf *NeuronFunc) error {
+	// if nf is nil, don't set it
+	if nf == nil {
+		return fmt.Errorf("Invalid neuron function supplied: %v\n", nf)
+	}
+	// INPUT layer has no activation function
+	if l.kind == INPUT {
+		return fmt.Errorf("Can not modify activation function of %s layer\n", l.kind)
+	}
 	l.activFunc = nf
+	return nil
 }

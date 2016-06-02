@@ -8,7 +8,7 @@ const (
 // NetworkKind defines a type of neural network
 type NetworkKind uint
 
-// String implements Stringer interface for pretty printing of NetworkKind
+// String implements Stringer interface for pretty printing
 func (nk NetworkKind) String() string {
 	switch nk {
 	case FEEDFWD:
@@ -18,10 +18,15 @@ func (nk NetworkKind) String() string {
 	}
 }
 
-// Network represents a certain type of Neural Network
-// It has an id and can have arbitrary number of layers
+// Network represents a certain kind of Neural Network.
+// It has an id and can have arbitrary number of layers.
 type Network struct {
 	id     string
 	kind   NetworkKind
 	layers []*Layer
+}
+
+// ID returns neural network id
+func (n Network) ID() string {
+	return n.id
 }
