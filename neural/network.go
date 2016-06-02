@@ -1,5 +1,11 @@
 package neural
 
+import (
+	"fmt"
+
+	"github.com/milosgajdos83/go-neural/pkg/helpers"
+)
+
 const (
 	// FEEDFWD is a feed forwardf Neural Network
 	FEEDFWD NetworkKind = iota + 1
@@ -18,6 +24,16 @@ func (nk NetworkKind) String() string {
 	}
 }
 
+// NetworkArch allows to specify network architecture to be created
+type NetworkArch struct {
+	// Input layer size
+	Input int
+	// Hidden layers' sizes
+	Hidden []int
+	// Output layer size
+	Output int
+}
+
 // Network represents a certain kind of Neural Network.
 // It has an id and can have arbitrary number of layers.
 type Network struct {
@@ -26,7 +42,62 @@ type Network struct {
 	layers []*Layer
 }
 
+// NewNetwork creates new neural network and returns it
+// It accepts two parameters: netKind which represents what kind of neural network layer you want
+// to create and layerSizes which specify number of neurons in each layer.
+// It fails with error if either the unsupported network kind has been requested or
+// if any of the network layers could not be created
+func NewNetwork(netKind NetworkKind, netArch *NetworkArch) (*Network, error) {
+	// if network kind is unknown return error
+	if netKind.String() == "UNKNOWN" {
+		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", netKind)
+	}
+	// you must supply network architecture
+	if netArch == nil {
+		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", netArch)
+	}
+	net := &Network{}
+	net.id = helpers.PseudoRandString(10)
+	net.kind = netKind
+	// Initialize INPUT layer: Input and Output layers are the same
+	inLayer, err := NewLayer(INPUT, net, netArch.Input, netArch.Input)
+	if err != nil {
+		return nil, err
+	}
+	net.layers = append(net.layers, inLayer)
+	// layer input size set to INPUT as that's the first layer in to first HIDDEN layer
+	layerInSize := netArch.Input
+	// create HIDDEN layers
+	for _, hiddenSize := range netArch.Hidden {
+		layer, err := NewLayer(HIDDEN, net, layerInSize, hiddenSize)
+		if err != nil {
+			return nil, err
+		}
+		net.layers = append(net.layers, layer)
+		// layerInSize is set to output of the previous layer
+		layerInSize = hiddenSize
+	}
+	// Create OUTPUT layer
+	outLayer, err := NewLayer(OUTPUT, net, layerInSize, netArch.Output)
+	if err != nil {
+		return nil, err
+	}
+	net.layers = append(net.layers, outLayer)
+	// return network
+	return net, nil
+}
+
 // ID returns neural network id
 func (n Network) ID() string {
 	return n.id
+}
+
+// Kind returns kind of neural network
+func (n Network) Kind() NetworkKind {
+	return n.kind
+}
+
+// Layers returns network layers in slice sorted from INPUT to OUTPUT layer
+func (n Network) Layers() []*Layer {
+	return n.layers
 }
