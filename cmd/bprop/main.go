@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/milosgajdos83/go-neural/dataset"
+	"github.com/milosgajdos83/go-neural/neural"
 )
 
 var (
@@ -16,6 +17,8 @@ var (
 	labels bool
 	// do we want to normalize data
 	scale bool
+	// how many classes are in the datasets
+	classes int
 	// number of iterations
 	iters int
 	// regularization parameter
@@ -26,6 +29,7 @@ func init() {
 	flag.StringVar(&data, "data", "", "Path to training data set")
 	flag.BoolVar(&labels, "labels", false, "Is the data set labeled")
 	flag.BoolVar(&scale, "scale", false, "Require data scaling")
+	flag.IntVar(&classes, "classes", 0, "How many classes are in the data set")
 	flag.IntVar(&iters, "iters", 50, "Number of iterations")
 	flag.Float64Var(&lambda, "lambda", 1.0, "Regularization parameter")
 }
@@ -60,7 +64,22 @@ func main() {
 	// extract labels
 	labels := ds.Labels()
 	if labels == nil {
-		fmt.Println("No labels available for supervised learning")
+		fmt.Println("Data set does not contain any labels")
+		os.Exit(1)
+	}
+	// number of classes must be a positive integer
+	if classes < 1 {
+		fmt.Println("Insufficient number of classes: %d\n", classes)
+		os.Exit(1)
+	}
+	// Create new FEEDFWD network
+	_, colsIn := features.Dims()
+	hiddenLayers := []int{25}
+	// we will classify the output to number of specified classes
+	netArch := &neural.NetworkArch{Input: colsIn, Hidden: hiddenLayers, Output: classes}
+	nn, err := neural.NewNetwork(neural.FEEDFWD, netArch)
+	if err != nil {
+		fmt.Printf("Error creating network: %s\n", err)
 		os.Exit(1)
 	}
 }

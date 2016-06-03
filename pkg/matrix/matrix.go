@@ -9,11 +9,7 @@ import (
 )
 
 // Ones returns a matrix of rows x cols filled with 1.0
-// It returns error if the supplied number of rows or columns are not positive integers
-func Ones(rows, cols int) (*mat64.Dense, error) {
-	if rows <= 0 || cols <= 0 {
-		return nil, fmt.Errorf("Incorrect dimensions supplied: %d x %dd\n", rows, cols)
-	}
+func Ones(rows, cols int) *mat64.Dense {
 	// allocate zero matrix and set every element to 1.0
 	onesMx := mat64.NewDense(rows, cols, nil)
 	for i := 0; i < rows; i++ {
@@ -21,23 +17,19 @@ func Ones(rows, cols int) (*mat64.Dense, error) {
 			onesMx.Set(i, j, 1.0)
 		}
 	}
-	return onesMx, nil
+	return onesMx
 }
 
 // AddBias adds a bias unit (either a vector or a single unit) to mat64.Matrix
 // and returns the new augmented matrix without modifying the original one
-// It returns error if the bias matrix could not be created
-func AddBias(m mat64.Matrix) (*mat64.Dense, error) {
+func AddBias(m mat64.Matrix) *mat64.Dense {
 	rows, cols := m.Dims()
 	// bias is a 1-column matrix that contains 1.0s
-	bias, err := Ones(rows, 1)
-	if err != nil {
-		return nil, err
-	}
+	bias := Ones(rows, 1)
 	// allocate the new augmented bias matrix
 	biasMx := mat64.NewDense(rows, cols+1, nil)
 	biasMx.Augment(bias, m)
-	return biasMx, nil
+	return biasMx
 }
 
 // MakeLabelsMx creates a 1-of-N matrix from the supplied vector of labels

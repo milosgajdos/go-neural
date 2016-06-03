@@ -11,16 +11,13 @@ func TestOnes(t *testing.T) {
 	assert := assert.New(t)
 
 	// Negative rows/cols are not allowed
-	mx, err := Ones(-4, 3)
-	assert.Nil(mx)
-	assert.Error(err)
+	assert.Panics(func() { Ones(-4, 3) })
 
 	// all elements must be equal to 1.0
 	onesVec := []float64{1.0, 1.0, 1.0, 1.0}
 	onesMx := mat64.NewDense(2, 2, onesVec)
-	mx, err = Ones(2, 2)
+	mx := Ones(2, 2)
 	assert.NotNil(mx)
-	assert.NoError(err)
 	assert.True(mat64.Equal(onesMx, mx))
 }
 
@@ -29,9 +26,8 @@ func TestAddBias(t *testing.T) {
 
 	// create new matrix and add bias
 	tstMx := mat64.NewDense(2, 2, nil)
-	biasMx, err := AddBias(tstMx)
+	biasMx := AddBias(tstMx)
 	assert.NotNil(biasMx)
-	assert.NoError(err)
 	assert.False(mat64.Equal(tstMx, biasMx))
 	r, c := tstMx.Dims()
 	rb, cb := biasMx.Dims()

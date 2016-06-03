@@ -165,10 +165,7 @@ func (l *Layer) Out(inputMx mat64.Matrix) (*mat64.Dense, error) {
 		return nil, fmt.Errorf("Dimension mismatch. Weights: %d, Input: %d\n", wCols, inCols)
 	}
 	// add bias to input
-	biasInMx, err := matrix.AddBias(inputMx)
-	if err != nil {
-		return nil, err
-	}
+	biasInMx := matrix.AddBias(inputMx)
 	// calculate activation function inputs
 	out := new(mat64.Dense)
 	out.Mul(biasInMx, l.weights.T())

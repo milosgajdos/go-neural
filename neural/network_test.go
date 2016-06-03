@@ -3,6 +3,7 @@ package neural
 import (
 	"testing"
 
+	"github.com/gonum/matrix/mat64"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,4 +94,29 @@ func TestLayers(t *testing.T) {
 	// OUTPUT layer
 	layerKind = layers[len(layers)-1].Kind()
 	assert.Equal(layerKind, OUTPUT)
+}
+
+func TestForwardProp(t *testing.T) {
+	assert := assert.New(t)
+	// create features matrix
+	features := []float64{5.1, 3.5, 1.4, 0.2,
+		4.9, 3.0, 1.4, 0.2,
+		4.7, 3.2, 1.3, 0.2,
+		4.6, 3.1, 1.5, 0.2,
+		5.0, 3.6, 1.4, 0.2}
+	inMx := mat64.NewDense(5, 4, features)
+	// create test network
+	inRows, inCols := inMx.Dims()
+	hiddenLayers := []int{5}
+	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
+	net, err := NewNetwork(FEEDFWD, na)
+	assert.NotNil(net)
+	assert.NoError(err)
+	out, _ := net.ForwardProp(inMx, 0)
+	assert.NotNil(out)
+	outRows, outCols := out.Dims()
+	assert.Equal(outRows, inRows)
+	assert.Equal(outCols, na.Output)
+	// Panics with error
+	assert.Panics(func() { net.ForwardProp(nil, 0) })
 }

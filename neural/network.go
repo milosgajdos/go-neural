@@ -3,6 +3,7 @@ package neural
 import (
 	"fmt"
 
+	"github.com/gonum/matrix/mat64"
 	"github.com/milosgajdos83/go-neural/pkg/helpers"
 )
 
@@ -100,4 +101,23 @@ func (n Network) Kind() NetworkKind {
 // Layers returns network layers in slice sorted from INPUT to OUTPUT layer
 func (n Network) Layers() []*Layer {
 	return n.layers
+}
+
+// ForwardProp calculates the result of forward propagation for agiven input matrix.
+// It recursively activates all layers in the network and returns the output in a matrix
+// It panics if any of the outputs on the way to the final layer fails to be computed.
+func (n *Network) ForwardProp(inMx mat64.Matrix, idx int) (mat64.Matrix, int) {
+	// get all the layers
+	layers := n.Layers()
+	// when reached the last layer, exit
+	if idx > len(layers)-1 {
+		return inMx, idx
+	}
+	// pick particular network layer
+	layer := layers[idx]
+	out, err := layer.Out(inMx)
+	if err != nil {
+		panic(err)
+	}
+	return n.ForwardProp(out, idx+1)
 }
