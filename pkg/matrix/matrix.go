@@ -36,14 +36,14 @@ func AddBias(m mat64.Matrix) *mat64.Dense {
 // Labels matrix has the following dimensions: labels.Len() x count
 // It does not modify the supplied matrix of labels.
 // It returns error if the number of labels is negative integer
-func MakeLabelsMx(labels *mat64.Vector, labCount int) (*mat64.Dense, error) {
-	if labCount < 0 {
-		return nil, fmt.Errorf("Incorrect number of labels: %d\n", labCount)
+func MakeLabelsMx(labels *mat64.Vector, expLabels int) (*mat64.Dense, error) {
+	if expLabels < 0 {
+		return nil, fmt.Errorf("Incorrect number of labels: %d\n", labels)
 	}
 	// get number of samples
 	samples := labels.Len()
 	// create labels matrix
-	mx := mat64.NewDense(samples, labCount, nil)
+	mx := mat64.NewDense(samples, expLabels, nil)
 	for i := 0; i < samples; i++ {
 		val := labels.At(i, 0)
 		mx.Set(i, int(val)-1, 1.0)
@@ -109,22 +109,22 @@ func mx2VecByCol(m *mat64.Dense) []float64 {
 // SetMx2Vec sets all elements of a matrix to values stored in a slice
 // passed in as a parameter. It fails with error if number of elements
 // of the matrix is bigger than number of elements of the slice.
-func SetMx2Vec(vec []float64, mx *mat64.Dense, byRow bool) (err error) {
+func SetMx2Vec(mx *mat64.Dense, vec []float64, byRow bool) (err error) {
 	r, c := mx.Dims()
-	if r*c > len(vec) {
+	if r*c != len(vec) {
 		err = fmt.Errorf("Elements count mismatch: Vec: %d, Matrix: %d\n", len(vec), r*c)
 		return
 	}
 	if byRow {
-		setMx2VecByRow(vec, mx)
+		setMx2VecByRow(mx, vec)
 		return
 	}
-	setMx2VecByCol(vec, mx)
+	setMx2VecByCol(mx, vec)
 	return
 }
 
 // setMxByRowVec sets elements of mx from vec by rows
-func setMx2VecByRow(vec []float64, mx *mat64.Dense) {
+func setMx2VecByRow(mx *mat64.Dense, vec []float64) {
 	rows, cols := mx.Dims()
 	acc := 0
 	for i := 0; i < rows; i++ {
@@ -134,7 +134,7 @@ func setMx2VecByRow(vec []float64, mx *mat64.Dense) {
 }
 
 // setMxByColVec sets elements of mx from vec by columns
-func setMx2VecByCol(vec []float64, mx *mat64.Dense) {
+func setMx2VecByCol(mx *mat64.Dense, vec []float64) {
 	rows, cols := mx.Dims()
 	acc := 0
 	for i := 0; i < cols; i++ {

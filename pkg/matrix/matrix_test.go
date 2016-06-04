@@ -113,14 +113,14 @@ func TestSetMx2Vec(t *testing.T) {
 	assert.NotNil(mx)
 
 	// Set matrix by row
-	err := SetMx2Vec(data, mx, true)
+	err := SetMx2Vec(mx, data, true)
 	rowMx := mat64.NewDense(3, 2, data)
 	assert.NoError(err)
 	assert.NotNil(rowMx)
 	assert.True(mat64.Equal(mx, rowMx))
 
 	// Set matrix by col
-	err = SetMx2Vec(data, mx, false)
+	err = SetMx2Vec(mx, data, false)
 	colData := []float64{1.2, 6.7, 3.4, 8.9, 4.5, 10.0}
 	colMx := mat64.NewDense(3, 2, colData)
 	assert.NoError(err)
@@ -129,7 +129,7 @@ func TestSetMx2Vec(t *testing.T) {
 
 	// Vector is smaller than number of matrix elements
 	shortVec := []float64{1.3, 2.4}
-	err = SetMx2Vec(shortVec, mx, true)
+	err = SetMx2Vec(mx, shortVec, true)
 	assert.Error(err)
 }
 
