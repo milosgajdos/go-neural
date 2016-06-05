@@ -24,8 +24,8 @@ type Config struct {
 // Underneath it implements the following objective function:
 // J = -(sum(sum((out_k .* log(out) + (1 - out_k) .* log(1 - out)), 2)))/samples
 func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) (float64, error) {
-	if inMx == nil {
-		return -1.0, fmt.Errorf("Cant calculate cost for %v matrix\n", inMx)
+	if inMx == nil || expOut == nil {
+		return -1.0, fmt.Errorf("Cant calculate cost for In: %v Out: %v\n", inMx, expOut)
 	}
 	layers := n.Layers()
 	// if we supply network weights, set the neural network to given weights
@@ -92,6 +92,90 @@ func CostReg(n *neural.Network, lambda float64, samples int) (float64, error) {
 		}
 	}
 	return reg, nil
+}
+
+// Grad calculates network gradient for a particular network and configuration
+// It returns a gradient slice or fails with error
+func Grad(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) ([]float64, error) {
+	// get all network layers
+	layers := n.Layers()
+	// input and expected output must not be nil
+	if inMx == nil || expOut == nil {
+		return nil, fmt.Errorf("Cant calculate gradient for In: %v Out: %v\n", inMx, expOut)
+	}
+	// if we supply network weights, set the neural network to given weights
+	if c.Weights != nil {
+		if err := setNetWeights(layers[1:], c.Weights); err != nil {
+			return nil, err
+		}
+	}
+	// number of data samples
+	samples, _ := inMx.Dims()
+	labelsMx, err := matrix.MakeLabelsMx(expOut, c.Labels)
+	if err != nil {
+		return nil, err
+	}
+	// Do the full forward propagation
+	out, err := n.ForwardProp(inMx, len(layers)-1)
+	if err != nil {
+		return nil, err
+	}
+	// iterate through all samples and calculate errors and corrections
+	for i := 0; i < samples; i++ {
+		// pick a sample
+		inSample := inMx.RowView(i)
+		// pick the expected output
+		expVec := labelsMx.RowView(i)
+		// pick actual output from output layer
+		deltaVec := (out.(*mat64.Dense)).RowView(i)
+		// calculate the error = out - y
+		deltaVec.SubVec(deltaVec, expVec)
+		// run the backpropagation
+		if err := n.BackProp(inSample.T(), deltaVec.T(), len(layers)-1); err != nil {
+			return nil, err
+		}
+	}
+	// zero-th layer is INPUT layer and has no Deltas
+	var gradient []float64
+	for i := 1; i < len(layers); i++ {
+		deltas := layers[i].Deltas()
+		deltas.Scale(1/float64(samples), deltas)
+		gradReg, err := GradReg(n, i, c.Lambda, samples)
+		if err != nil {
+			return nil, err
+		}
+		gradReg.Add(deltas, gradReg)
+		gradVec := matrix.Mx2Vec(gradReg, false)
+		gradient = append(gradient, gradVec...)
+	}
+	return gradient, nil
+}
+
+// GradReg calculates regularization cost of the gradient for a particular network and config.
+func GradReg(n *neural.Network, layerIdx int, lambda float64, samples int) (*mat64.Dense, error) {
+	layers := n.Layers()
+	// 0-th layer has not weights, hence no gradient
+	if layerIdx == 0 || layerIdx > len(layers)-1 {
+		return nil, fmt.Errorf("Incorrect layer index supplied: %d\n", layerIdx)
+	}
+	// incorrect number of samples
+	if samples <= 0 {
+		return nil, fmt.Errorf("Incorrect number of samples supplied: %d\n", samples)
+	}
+	layer := layers[layerIdx]
+	r, c := layer.Weights().Dims()
+	// initialize weights
+	regWeights := mat64.NewDense(r, c, nil)
+	if lambda > 0 {
+		// calculate the regularizer
+		reg := lambda / float64(samples)
+		regWeights.Clone(layer.Weights())
+		// set the first column to 0
+		zeros := make([]float64, r)
+		regWeights.SetCol(0, zeros)
+		regWeights.Scale(reg, regWeights)
+	}
+	return regWeights, nil
 }
 
 // setNetWeights sets weights of all the requsted layers to values supplied via weights slice

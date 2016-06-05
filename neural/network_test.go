@@ -190,4 +190,7 @@ func TestBackProp(t *testing.T) {
 	// number of bp layers beyond network size throws error
 	err = net.BackProp(sampleVec.T(), errVec.T(), 100)
 	assert.Error(err)
+	// negative from boundary throws error
+	err = net.BackProp(sampleVec.T(), errVec.T(), 100)
+	assert.Error(err)
 }

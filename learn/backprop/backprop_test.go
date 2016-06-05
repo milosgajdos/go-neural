@@ -96,6 +96,74 @@ func TestCostReg(t *testing.T) {
 	assert.True(reg < 0)
 }
 
+func TestGrad(t *testing.T) {
+	assert := assert.New(t)
+	// create test config without any weights
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5}
+	grad, err := Grad(net, c, inMx, labelsVec)
+	assert.NoError(err)
+	assert.NotNil(grad)
+	layers := net.Layers()
+	var gradLen int
+	for _, layer := range layers[1:] {
+		r, c := layer.Weights().Dims()
+		gradLen += r * c
+	}
+	assert.Equal(gradLen, len(grad))
+	// allocate weights
+	var weights []float64
+	for i := range layers[1:] {
+		weights = append(weights, matrix.Mx2Vec(layers[i+1].Weights(), false)...)
+	}
+	c.Weights = weights
+	grad, err = Grad(net, c, inMx, labelsVec)
+	assert.NoError(err)
+	assert.NotNil(grad)
+	// nil inMx causes error
+	grad, err = Grad(net, c, nil, labelsVec)
+	assert.Error(err)
+	assert.Nil(grad)
+	// expected labels are borked
+	c.Labels = -100
+	grad, err = Grad(net, c, inMx, labelsVec)
+	assert.Error(err)
+	assert.Nil(grad)
+	// non-sense input matrix
+	tstMx := mat64.NewDense(100, 20, nil)
+	assert.NotNil(tstMx)
+	grad, err = Grad(net, c, tstMx, labelsVec)
+	assert.Error(err)
+	assert.Nil(grad)
+}
+
+func TestGradReg(t *testing.T) {
+	assert := assert.New(t)
+	// if lambda is 0.0, regularizer is 0.0
+	reg, err := GradReg(net, 1, 1.0, 1000)
+	assert.NoError(err)
+	assert.NotNil(reg)
+	layers := net.Layers()
+	layRows, layCols := layers[1].Weights().Dims()
+	regRows, regCols := reg.Dims()
+	assert.Equal(layRows, regRows)
+	assert.Equal(layCols, regCols)
+	// incorrect index
+	reg, err = GradReg(net, 0, 1.0, 1000)
+	assert.Error(err)
+	assert.Nil(reg)
+	// incorrect number of samples
+	reg, err = GradReg(net, 1, 1.0, -1000)
+	assert.Error(err)
+	assert.Nil(reg)
+	// zero lambda returns zero matrix
+	tstMx := mat64.NewDense(layRows, layCols, nil)
+	assert.NotNil(tstMx)
+	reg, err = GradReg(net, 1, 0.0, 10)
+	assert.NoError(err)
+	assert.NotNil(reg)
+	assert.Equal(tstMx, reg)
+}
+
 func TestSetNetWeights(t *testing.T) {
 	assert := assert.New(t)
 	// Neural net layers
