@@ -148,3 +148,46 @@ func TestForwardProp(t *testing.T) {
 	assert.Nil(out)
 	assert.Error(err)
 }
+
+func TestBackProp(t *testing.T) {
+	assert := assert.New(t)
+	// create features matrix
+	features := []float64{5.1, 3.5, 1.4, 0.2,
+		4.9, 3.0, 1.4, 0.2,
+		4.7, 3.2, 1.3, 0.2,
+		4.6, 3.1, 1.5, 0.2,
+		5.0, 3.6, 1.4, 0.2}
+	inMx := mat64.NewDense(5, 4, features)
+	// create test network
+	_, inCols := inMx.Dims()
+	hiddenLayers := []int{5}
+	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
+	net, err := NewNetwork(FEEDFWD, na)
+	assert.NotNil(net)
+	assert.NoError(err)
+	// retrieve layers
+	layers := net.Layers()
+	assert.NotNil(layers)
+	// expected labels
+	expVal := []float64{2, 1, 3, 2, 4}
+	expVec := mat64.NewVector(len(expVal), expVal)
+	// propagate forward to the last layer
+	out, err := net.ForwardProp(inMx, len(layers)-1)
+	assert.NotNil(out)
+	assert.NoError(err)
+	errVec := (out.(*mat64.Dense)).RowView(0)
+	errVec.SubVec(errVec, expVec)
+	// Pick a sample vector and test backprop
+	sampleVec := inMx.RowView(0)
+	err = net.BackProp(sampleVec.T(), errVec.T(), len(layers)-1)
+	assert.NoError(err)
+	// nil input matrix throws errors
+	err = net.BackProp(nil, nil, 0)
+	assert.Error(err)
+	// nil error matrix throws error
+	err = net.BackProp(sampleVec.T(), nil, len(layers)-1)
+	assert.Error(err)
+	// number of bp layers beyond network size throws error
+	err = net.BackProp(sampleVec.T(), errVec.T(), 100)
+	assert.Error(err)
+}

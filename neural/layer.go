@@ -149,14 +149,15 @@ func (l *Layer) Deltas() *mat64.Dense {
 
 // Out calculates output of the network layer for the given input
 // If the layer is INPUT layer, it returns the supplied input argument.
-func (l *Layer) Out(inputMx mat64.Matrix) (*mat64.Dense, error) {
+//func (l *Layer) Out(inputMx mat64.Matrix) (*mat64.Dense, error) {
+func (l *Layer) Out(inputMx mat64.Matrix) (mat64.Matrix, error) {
 	// if input is nil, return error
 	if inputMx == nil {
 		return nil, fmt.Errorf("Can't calculate output for %v input\n", inputMx)
 	}
 	// if it's INPUT layer, output is input
 	if l.kind == INPUT {
-		return inputMx.(*mat64.Dense), nil
+		return inputMx, nil
 	}
 	// input column dimensions + bias must match the weights column dimensions
 	_, inCols := inputMx.Dims()

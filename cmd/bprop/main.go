@@ -82,4 +82,5 @@ func main() {
 		fmt.Printf("Error creating network: %s\n", err)
 		os.Exit(1)
 	}
+	fmt.Println(nn)
 }
