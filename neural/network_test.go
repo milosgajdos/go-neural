@@ -144,5 +144,7 @@ func TestForwardProp(t *testing.T) {
 	// incorrect input dimensions
 	tstMx := mat64.NewDense(100, 20, nil)
 	assert.NotNil(tstMx)
-	assert.Panics(func() { net.ForwardProp(tstMx, len(layers)-1) })
+	out, err = net.ForwardProp(tstMx, len(layers)-1)
+	assert.Nil(out)
+	assert.Error(err)
 }

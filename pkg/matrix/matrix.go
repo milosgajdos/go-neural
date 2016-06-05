@@ -38,7 +38,7 @@ func AddBias(m mat64.Matrix) *mat64.Dense {
 // It returns error if the number of labels is negative integer
 func MakeLabelsMx(labels *mat64.Vector, expLabels int) (*mat64.Dense, error) {
 	if expLabels < 0 {
-		return nil, fmt.Errorf("Incorrect number of labels: %d\n", labels)
+		return nil, fmt.Errorf("Incorrect number of labels: %d\n", expLabels)
 	}
 	// get number of samples
 	samples := labels.Len()

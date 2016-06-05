@@ -52,7 +52,7 @@ func TestCost(t *testing.T) {
 	assert.NoError(err)
 	assert.True(cost > 0)
 	// allocate weights
-	weights := make([]float64, 0)
+	var weights []float64
 	layers := net.Layers()
 	for i := range layers[1:] {
 		weights = append(weights, matrix.Mx2Vec(layers[i+1].Weights(), false)...)
@@ -72,7 +72,9 @@ func TestCost(t *testing.T) {
 	assert.Error(err)
 	// Incorrect matrix dimensions
 	tstMx := mat64.NewDense(100, 100, nil)
-	assert.Panics(func() { Cost(net, c, tstMx, labelsVec) })
+	cost, err = Cost(net, c, tstMx, labelsVec)
+	assert.True(cost == -1.0)
+	assert.Error(err)
 }
 
 func TestCostReg(t *testing.T) {
@@ -104,7 +106,7 @@ func TestSetNetWeights(t *testing.T) {
 		acc += r * c
 	}
 	weights := make([]float64, acc)
-	netWeights := make([]float64, 0)
+	var netWeights []float64
 	err := setNetWeights(layers[1:], weights)
 	assert.NoError(err)
 	for i := range layers[1:] {

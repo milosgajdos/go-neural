@@ -19,7 +19,7 @@ type Config struct {
 	Labels int
 }
 
-// CostFunc calculates cost of the objective function cost for a particular network and parameters
+// Cost calculates cost of the objective function cost for a particular network and parameters
 // It returns a single value or fails with error.
 // Underneath it implements the following objective function:
 // J = -(sum(sum((out_k .* log(out) + (1 - out_k) .* log(1 - out)), 2)))/samples
