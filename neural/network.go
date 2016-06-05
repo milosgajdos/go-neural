@@ -105,19 +105,37 @@ func (n Network) Layers() []*Layer {
 
 // ForwardProp calculates the result of forward propagation for agiven input matrix.
 // It recursively activates all layers in the network and returns the output in a matrix
-// It panics if any of the outputs on the way to the final layer fails to be computed.
-func (n *Network) ForwardProp(inMx mat64.Matrix, idx int) (mat64.Matrix, int) {
+// It fails with error if requested end layer index is out of all network layers
+// It panics if any of the network layer outputs duroing propagation fails to be computed.
+func (n *Network) ForwardProp(inMx mat64.Matrix, toLayer int) (mat64.Matrix, error) {
+	if inMx == nil {
+		return nil, fmt.Errorf("Can't forward propage input: %v\n", inMx)
+	}
 	// get all the layers
 	layers := n.Layers()
-	// when reached the last layer, exit
-	if idx > len(layers)-1 {
-		return inMx, idx
+	// layer must exist
+	if toLayer <= 0 || toLayer > len(layers)-1 {
+		return nil, fmt.Errorf("Cant propagate beyond network layers: %d\n", len(layers))
 	}
-	// pick particular network layer
-	layer := layers[idx]
+	// calculate the propagation
+	out, _, _ := n.doForwPropagation(inMx, 0, toLayer)
+	// return the output
+	return out, nil
+}
+
+// doForwPropagation perform the actual forward propagation
+func (n *Network) doForwPropagation(inMx mat64.Matrix, start, end int) (mat64.Matrix, int, int) {
+	// get all the layers
+	layers := n.Layers()
+	// we can't go backwards
+	if start > end {
+		return inMx, start, end
+	}
+	// pick starting layer
+	layer := layers[start]
 	out, err := layer.Out(inMx)
 	if err != nil {
 		panic(err)
 	}
-	return n.ForwardProp(out, idx+1)
+	return n.doForwPropagation(out, start+1, end)
 }

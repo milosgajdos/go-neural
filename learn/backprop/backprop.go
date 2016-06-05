@@ -24,6 +24,9 @@ type Config struct {
 // Underneath it implements the following objective function:
 // J = -(sum(sum((out_k .* log(out) + (1 - out_k) .* log(1 - out)), 2)))/samples
 func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) (float64, error) {
+	if inMx == nil {
+		return -1.0, fmt.Errorf("Cant calculate cost for %v matrix\n", inMx)
+	}
 	layers := n.Layers()
 	// if we supply network weights, set the neural network to given weights
 	if c.Weights != nil {
@@ -34,7 +37,10 @@ func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector)
 	// number of data samples
 	samples, _ := inMx.Dims()
 	// run forward propagation from INPUT layer
-	netOut, _ := n.ForwardProp(inMx, 0)
+	netOut, err := n.ForwardProp(inMx, len(layers)-1)
+	if err != nil {
+		return -1.0, err
+	}
 	netOutMx := netOut.(*mat64.Dense)
 	// labelsMx is one-of-N matrix for each output label
 	// i.e. 3rd label would be: 0 0 1 0 0 etc.
@@ -89,11 +95,14 @@ func CostReg(n *neural.Network, lambda float64, samples int) (float64, error) {
 }
 
 // setNetWeights sets weights of all the requsted layers to values supplied via weights slice
-// TODO: better error checking
 func setNetWeights(layers []*neural.Layer, weights []float64) error {
 	acc := 0
+	wLen := len(weights)
 	for _, layer := range layers {
 		r, c := layer.Weights().Dims()
+		if (wLen - acc) < r*c {
+			return fmt.Errorf("Insufficient number of weights supplied %d\n", wLen)
+		}
 		err := matrix.SetMx2Vec(layer.Weights(), weights[acc:(acc+r*c)], false)
 		if err != nil {
 			return err

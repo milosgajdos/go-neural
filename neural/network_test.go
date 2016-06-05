@@ -112,11 +112,37 @@ func TestForwardProp(t *testing.T) {
 	net, err := NewNetwork(FEEDFWD, na)
 	assert.NotNil(net)
 	assert.NoError(err)
-	out, _ := net.ForwardProp(inMx, 0)
+	// retrieve layers
+	layers := net.Layers()
+	assert.NotNil(layers)
+	// can't proagate to 0-th layer
+	out, err := net.ForwardProp(inMx, 0)
+	assert.Nil(out)
+	assert.Error(err)
+	// can't propagate beyond last layer
+	out, err = net.ForwardProp(inMx, len(layers))
+	assert.Nil(out)
+	assert.Error(err)
+	// Propagate till the last layer
+	out, err = net.ForwardProp(inMx, len(layers)-1)
 	assert.NotNil(out)
+	assert.NoError(err)
 	outRows, outCols := out.Dims()
 	assert.Equal(outRows, inRows)
 	assert.Equal(outCols, na.Output)
-	// Panics with error
-	assert.Panics(func() { net.ForwardProp(nil, 0) })
+	// Propagate to the hidden layer
+	out, err = net.ForwardProp(inMx, len(layers)-2)
+	assert.NotNil(out)
+	assert.NoError(err)
+	outRows, outCols = out.Dims()
+	assert.Equal(outRows, inRows)
+	assert.Equal(outCols, na.Hidden[0])
+	// can't fwd propagate nil input
+	out, err = net.ForwardProp(nil, len(layers)-1)
+	assert.Nil(out)
+	assert.Error(err)
+	// incorrect input dimensions
+	tstMx := mat64.NewDense(100, 20, nil)
+	assert.NotNil(tstMx)
+	assert.Panics(func() { net.ForwardProp(tstMx, len(layers)-1) })
 }

@@ -66,6 +66,13 @@ func TestCost(t *testing.T) {
 	cost, err = Cost(net, c, inMx, labelsVec)
 	assert.True(cost == -1.0)
 	assert.Error(err)
+	// Can't calculate cost for nil matrix
+	cost, err = Cost(net, c, nil, labelsVec)
+	assert.True(cost == -1.0)
+	assert.Error(err)
+	// Incorrect matrix dimensions
+	tstMx := mat64.NewDense(100, 100, nil)
+	assert.Panics(func() { Cost(net, c, tstMx, labelsVec) })
 }
 
 func TestCostReg(t *testing.T) {
@@ -106,5 +113,6 @@ func TestSetNetWeights(t *testing.T) {
 	assert.Equal(weights, netWeights)
 	// incorrect length of weights
 	weights = make([]float64, 5)
-	assert.Panics(func() { setNetWeights(layers[1:], weights) })
+	err = setNetWeights(layers[1:], weights)
+	assert.Error(err)
 }
