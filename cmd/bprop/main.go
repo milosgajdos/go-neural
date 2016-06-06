@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/gonum/matrix/mat64"
 	"github.com/milosgajdos83/go-neural/dataset"
+	"github.com/milosgajdos83/go-neural/learn/backprop"
 	"github.com/milosgajdos83/go-neural/neural"
 )
 
@@ -14,7 +16,7 @@ var (
 	// path to the training data set
 	data string
 	// is the data set labeled
-	labels bool
+	labeled bool
 	// do we want to normalize data
 	scale bool
 	// how many classes are in the datasets
@@ -27,7 +29,7 @@ var (
 
 func init() {
 	flag.StringVar(&data, "data", "", "Path to training data set")
-	flag.BoolVar(&labels, "labels", false, "Is the data set labeled")
+	flag.BoolVar(&labeled, "labeled", false, "Is the data set labeled")
 	flag.BoolVar(&scale, "scale", false, "Require data scaling")
 	flag.IntVar(&classes, "classes", 0, "How many classes are in the data set")
 	flag.IntVar(&iters, "iters", 50, "Number of iterations")
@@ -50,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 	// load new data set from provided file
-	ds, err := dataset.NewDataSet(data, labels)
+	ds, err := dataset.NewDataSet(data, labeled)
 	if err != nil {
 		fmt.Printf("Unable to load Data Set: %s\n", err)
 		os.Exit(1)
@@ -77,10 +79,13 @@ func main() {
 	hiddenLayers := []int{25}
 	// we will classify the output to number of specified classes
 	netArch := &neural.NetworkArch{Input: colsIn, Hidden: hiddenLayers, Output: classes}
-	nn, err := neural.NewNetwork(neural.FEEDFWD, netArch)
+	net, err := neural.NewNetwork(neural.FEEDFWD, netArch)
 	if err != nil {
 		fmt.Printf("Error creating network: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Println(nn)
+	c := &backprop.Config{Weights: nil, Lambda: lambda, Labels: classes, Iters: iters}
+	if err := backprop.Train(net, c, features.(*mat64.Dense), labels.(*mat64.Vector)); err != nil {
+		fmt.Printf("Error training network: %s\n", err)
+	}
 }

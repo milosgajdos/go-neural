@@ -153,6 +153,7 @@ func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector)
 	if err != nil {
 		return -1.0, err
 	}
+	fmt.Printf("Cost: %f, Reg: %f\n", cost, reg)
 	return cost + reg, nil
 }
 

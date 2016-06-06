@@ -163,6 +163,9 @@ func (n *Network) BackProp(inMx, errMx mat64.Matrix, fromLayer int) error {
 
 // doBackProp performs the actual backpropagation
 func (n *Network) doBackProp(inMx, errMx mat64.Matrix, from, to int) error {
+	//fmt.Println("From", from)
+	//r, c := inMx.Dims()
+	//fmt.Printf("inMx: %d x %d\n", r, c)
 	// get all the layers
 	layers := n.Layers()
 	// pick deltas layer
@@ -183,14 +186,22 @@ func (n *Network) doBackProp(inMx, errMx mat64.Matrix, from, to int) error {
 	weightsErrLayer := layers[from-1]
 	weightsErrMx := weightsErrLayer.Weights()
 	// forward propagate to from layer
-	outMx, err := n.ForwardProp(inMx, from)
+	outMx, err := n.ForwardProp(inMx, from-1)
 	if err != nil {
 		return err
 	}
+	//r, c = outMx.Dims()
+	//fmt.Printf("outMx: %d x %d\n", r, c)
 	// add Bias unit
 	biasOutMx := matrix.AddBias(outMx)
+	//r, c = biasOutMx.Dims()
+	//fmt.Printf("biasOutMx: %d x %d\n", r, c)
 	dMx := new(mat64.Dense)
 	dMx.Mul(errMx.T(), biasOutMx)
+	//r, c = dMx.Dims()
+	//fmt.Printf("dMx: %d x %d\n", r, c)
+	//r, c = bpDeltasMx.Dims()
+	//fmt.Printf("bpDeltasMx: %d x %d\n", r, c)
 	bpDeltasMx.Add(bpDeltasMx, dMx)
 	// errTmp holds layer error not accounting for bias
 	errTmpMx := new(mat64.Dense)
