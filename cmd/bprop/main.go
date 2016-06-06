@@ -52,7 +52,7 @@ func main() {
 	// load new data set from provided file
 	ds, err := dataset.NewDataSet(data, labels)
 	if err != nil {
-		fmt.Println("Unable to load Data Set: %s\n", err)
+		fmt.Printf("Unable to load Data Set: %s\n", err)
 		os.Exit(1)
 	}
 	// extract features from data set
@@ -69,7 +69,7 @@ func main() {
 	}
 	// number of classes must be a positive integer
 	if classes < 1 {
-		fmt.Println("Insufficient number of classes: %d\n", classes)
+		fmt.Printf("Insufficient number of classes: %d\n", classes)
 		os.Exit(1)
 	}
 	// Create new FEEDFWD network

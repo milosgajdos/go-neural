@@ -44,10 +44,50 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
+func TestValidateConfig(t *testing.T) {
+	assert := assert.New(t)
+	// start with correct config
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 10, Iters: 50}
+	err := ValidateConfig(c)
+	assert.NoError(err)
+	err = ValidateConfig(nil)
+	assert.Error(err)
+	// wrong number of labels
+	c.Labels = 0
+	err = ValidateConfig(c)
+	assert.Error(err)
+	// Wrong number of iterations
+	c.Labels, c.Iters = 10, -10
+	err = ValidateConfig(c)
+	assert.Error(err)
+	// incorrect lambda
+	c.Lambda, c.Iters = -10.0, 50
+	err = ValidateConfig(c)
+	assert.Error(err)
+}
+
+func TestTrain(t *testing.T) {
+	assert := assert.New(t)
+	// create test config without any weights
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5, Iters: 5}
+	err := Train(net, c, inMx, labelsVec)
+	assert.NoError(err)
+	// nil input causes error
+	err = Train(net, c, nil, labelsVec)
+	assert.Error(err)
+	// nil labelsVec causes error
+	err = Train(net, c, inMx, nil)
+	assert.Error(err)
+	// bogus configuration causes error
+	c.Lambda = -100.0
+	err = Train(net, c, inMx, labelsVec)
+	assert.Error(err)
+}
+
 func TestCost(t *testing.T) {
 	assert := assert.New(t)
 	// create test config without any weights
-	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5}
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5, Iters: 50}
 	cost, err := Cost(net, c, inMx, labelsVec)
 	assert.NoError(err)
 	assert.True(cost > 0)
@@ -99,7 +139,7 @@ func TestCostReg(t *testing.T) {
 func TestGrad(t *testing.T) {
 	assert := assert.New(t)
 	// create test config without any weights
-	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5}
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5, Iters: 50}
 	grad, err := Grad(net, c, inMx, labelsVec)
 	assert.NoError(err)
 	assert.NotNil(grad)

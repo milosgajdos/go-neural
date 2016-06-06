@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/gonum/optimize"
 	"github.com/milosgajdos83/go-neural/neural"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
@@ -17,6 +18,89 @@ type Config struct {
 	Lambda float64
 	// Labels number of classifications labels
 	Labels int
+	// Iters is the number of training iterations
+	Iters int
+}
+
+// Train trains neural network with backpropagation algorithm and modifies its weights accordingly.
+// It returns error if the training fails or any of the supplied parameters are incorrect
+// It panics if either objective function cost or gradient calculations fail with error
+func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) error {
+	// Features matrix can't be nil
+	if inMx == nil {
+		return fmt.Errorf("Incorrect input supplied: %v\n", inMx)
+	}
+	// features labels can't be nil
+	if expOut == nil {
+		return fmt.Errorf("Incorrect lables supplied: %v\n", expOut)
+	}
+	// validate the supplied config
+	if err := ValidateConfig(c); err != nil {
+		return err
+	}
+	// costFunc for optimization
+	costFunc := func(x []float64) float64 {
+		c.Weights = x
+		curCost, err := Cost(n, c, inMx, expOut)
+		if err != nil {
+			panic(err)
+		}
+		return curCost
+	}
+	// gradfunc for optimization
+	gradFunc := func(grad []float64, x []float64) {
+		c.Weights = x
+		curGrad, err := Grad(n, c, inMx, expOut)
+		if err != nil {
+			panic(err)
+		}
+		if len(curGrad) != len(grad) {
+			panic("Incorrect size of the gradient")
+		}
+		grad = curGrad
+	}
+	// initialize parameters
+	var initWeights []float64
+	layers := n.Layers()
+	for i := range layers[1:] {
+		initWeights = append(initWeights, matrix.Mx2Vec(layers[i+1].Weights(), false)...)
+	}
+	// optimization problem
+	p := optimize.Problem{
+		Func: costFunc,
+		Grad: gradFunc,
+	}
+	settings := optimize.DefaultSettings()
+	settings.Recorder = nil
+	settings.FunctionConverge = nil
+	settings.MajorIterations = c.Iters
+	result, err := optimize.Local(p, initWeights, settings, &optimize.BFGS{})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("result.Status: %v\n", result.Status)
+	return nil
+}
+
+// ValidateConfig validates the supplied training configuration
+func ValidateConfig(c *Config) error {
+	// config can't be nil
+	if c == nil {
+		return fmt.Errorf("Incorrect configuration supplied: %v\n", c)
+	}
+	// incorrect number of labels
+	if c.Labels <= 0 {
+		return fmt.Errorf("Incorrect number of labels supplied: %d\n", c.Labels)
+	}
+	// incorrect number of iterations supplied
+	if c.Iters <= 0 {
+		return fmt.Errorf("Incorrect number of iterations supplied: %d\n", c.Iters)
+	}
+	// Incorrect lambda supplied
+	if c.Lambda < 0 {
+		return fmt.Errorf("Incorrect regularizer supplied: %f\n", c.Lambda)
+	}
+	return nil
 }
 
 // Cost calculates cost of the objective function cost for a particular network and parameters
@@ -26,6 +110,9 @@ type Config struct {
 func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) (float64, error) {
 	if inMx == nil || expOut == nil {
 		return -1.0, fmt.Errorf("Cant calculate cost for In: %v Out: %v\n", inMx, expOut)
+	}
+	if err := ValidateConfig(c); err != nil {
+		return -1.0, err
 	}
 	layers := n.Layers()
 	// if we supply network weights, set the neural network to given weights
@@ -102,6 +189,10 @@ func Grad(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector)
 	// input and expected output must not be nil
 	if inMx == nil || expOut == nil {
 		return nil, fmt.Errorf("Cant calculate gradient for In: %v Out: %v\n", inMx, expOut)
+	}
+	// validate config
+	if err := ValidateConfig(c); err != nil {
+		return nil, err
 	}
 	// if we supply network weights, set the neural network to given weights
 	if c.Weights != nil {
