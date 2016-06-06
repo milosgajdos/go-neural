@@ -69,7 +69,7 @@ func TestValidateConfig(t *testing.T) {
 func TestTrain(t *testing.T) {
 	assert := assert.New(t)
 	// create test config without any weights
-	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5, Iters: 5}
+	c := &Config{Weights: nil, Lambda: 1.0, Labels: 5, Iters: 2}
 	err := Train(net, c, inMx, labelsVec)
 	assert.NoError(err)
 	// nil input causes error

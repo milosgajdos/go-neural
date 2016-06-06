@@ -114,7 +114,7 @@ func (n *Network) ForwardProp(inMx mat64.Matrix, toLayer int) (mat64.Matrix, err
 	// get all the layers
 	layers := n.Layers()
 	// layer must exist
-	if toLayer <= 0 || toLayer > len(layers)-1 {
+	if toLayer < 0 || toLayer > len(layers)-1 {
 		return nil, fmt.Errorf("Cant propagate beyond network layers: %d\n", len(layers))
 	}
 	// calculate the propagation
@@ -125,12 +125,12 @@ func (n *Network) ForwardProp(inMx mat64.Matrix, toLayer int) (mat64.Matrix, err
 func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, error) {
 	// get all the layers
 	layers := n.Layers()
-	// we can't go backwards
-	if from > to {
-		return inMx, nil
-	}
 	// pick starting layer
 	layer := layers[from]
+	// we can't go backwards
+	if from == to {
+		return layer.Out(inMx)
+	}
 	out, err := layer.Out(inMx)
 	if err != nil {
 		return nil, err
@@ -142,13 +142,13 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 // It traverses network recursively and calculates errors and updates deltas of each network layer.
 // It fails with error if either supplied input and error matrices are nil or from boundary goes
 // beyond the first network layer that can have errors calculated
-func (n *Network) BackProp(inMx, errMx mat64.Matrix, fromLayer int) error {
+func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 	if inMx == nil {
 		return fmt.Errorf("Can't backpropagate input: %v\n", inMx)
 	}
 	// can't BP empty error
-	if errMx == nil {
-		return fmt.Errorf("Can't backpropagate ouput error: %v\n", errMx)
+	if deltaMx == nil {
+		return fmt.Errorf("Can't backpropagate ouput error: %v\n", deltaMx)
 	}
 	// get all the layers
 	layers := n.Layers()
@@ -157,66 +157,75 @@ func (n *Network) BackProp(inMx, errMx mat64.Matrix, fromLayer int) error {
 		return fmt.Errorf("Cant backpropagate beyond first layer: %d\n", len(layers))
 	}
 	// perform the actual back propagation till the first hidden layer
-	n.doBackProp(inMx, errMx, fromLayer, 1)
+	n.doBackProp(inMx, deltaMx, fromLayer, 1)
 	return nil
 }
 
 // doBackProp performs the actual backpropagation
-func (n *Network) doBackProp(inMx, errMx mat64.Matrix, from, to int) error {
-	//fmt.Println("From", from)
-	//r, c := inMx.Dims()
-	//fmt.Printf("inMx: %d x %d\n", r, c)
+func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
 	// get all the layers
 	layers := n.Layers()
 	// pick deltas layer
 	deltasLayer := layers[from]
 	bpDeltasMx := deltasLayer.Deltas()
-	// pick weights layer
-	weightsLayer := layers[from]
-	bpWeightsMx := weightsLayer.Weights()
 	// If we reach the 1st hidden layer we return
 	if from == to {
-		// add bias
-		dMx := matrix.AddBias(inMx)
-		dMx.Mul(errMx.T(), dMx)
+		// FP0(x)
+		outMx, err := n.ForwardProp(inMx, from-1)
+		if err != nil {
+			return err
+		}
+		// [FP0(x), bias]
+		outMxBias := matrix.AddBias(outMx)
+		// deltaMx'*[FP0(x), bias]
+		dMx := new(mat64.Dense)
+		dMx.Mul(deltaMx.T(), outMxBias)
+		// update big deltas
 		bpDeltasMx.Add(bpDeltasMx, dMx)
 		return nil
 	}
-	// weights err
+	// pick weights layer
+	weightsLayer := layers[from]
+	bpWeightsMx := weightsLayer.Weights()
+	// pick errLayer
 	weightsErrLayer := layers[from-1]
 	weightsErrMx := weightsErrLayer.Weights()
+	// UPDATE DELTAS
 	// forward propagate to from layer
+	// FP1(x)
 	outMx, err := n.ForwardProp(inMx, from-1)
 	if err != nil {
 		return err
 	}
-	//r, c = outMx.Dims()
-	//fmt.Printf("outMx: %d x %d\n", r, c)
+	// [FP1(x), bias]
 	// add Bias unit
 	biasOutMx := matrix.AddBias(outMx)
-	//r, c = biasOutMx.Dims()
-	//fmt.Printf("biasOutMx: %d x %d\n", r, c)
 	dMx := new(mat64.Dense)
-	dMx.Mul(errMx.T(), biasOutMx)
-	//r, c = dMx.Dims()
-	//fmt.Printf("dMx: %d x %d\n", r, c)
-	//r, c = bpDeltasMx.Dims()
-	//fmt.Printf("bpDeltasMx: %d x %d\n", r, c)
+	dMx.Mul(deltaMx.T(), biasOutMx)
+	// D2 = D2 + delta4*[FP1(x), bias]
 	bpDeltasMx.Add(bpDeltasMx, dMx)
+	// CALCULATE DELTAMX
 	// errTmp holds layer error not accounting for bias
 	errTmpMx := new(mat64.Dense)
-	errTmpMx.Mul(bpWeightsMx.T(), errMx.T())
+	// T2'*delta3'
+	errTmpMx.Mul(bpWeightsMx.T(), deltaMx.T())
 	r, c := errTmpMx.Dims()
+	// avoid bias tmp(2:end, :)
 	layeErr := errTmpMx.View(1, 0, r-1, c).(*mat64.Dense)
 	// pre-activation unit
+	// FP0(x)
 	actInMx, err := n.ForwardProp(inMx, from-2)
 	if err != nil {
 		return err
 	}
+	// [FP0(x), bias]
 	biasActInMx := matrix.AddBias(actInMx)
 	gradMx := new(mat64.Dense)
+	// [FP0(x), bias] * T1
 	gradMx.Mul(biasActInMx, weightsErrMx.T())
+	// sigGrad([FP0(x), bias] * T1)
 	gradMx.Apply(weightsErrLayer.NeuronFunc().BackFn, gradMx)
-	gradMx.MulElem(layeErr, gradMx)
+	// tmp(2:end, :)' .* sigmoidGradient(z2_t)
+	gradMx.MulElem(layeErr.T(), gradMx)
 	return n.doBackProp(inMx, gradMx, from-1, to)
 }

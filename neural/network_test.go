@@ -115,10 +115,11 @@ func TestForwardProp(t *testing.T) {
 	// retrieve layers
 	layers := net.Layers()
 	assert.NotNil(layers)
-	// can't proagate to 0-th layer
+	// 0-th end layer returns the input
 	out, err := net.ForwardProp(inMx, 0)
-	assert.Nil(out)
-	assert.Error(err)
+	assert.NotNil(out)
+	assert.NoError(err)
+	assert.Equal(out, inMx)
 	// can't propagate beyond last layer
 	out, err = net.ForwardProp(inMx, len(layers))
 	assert.Nil(out)

@@ -45,6 +45,7 @@ func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector
 		if err != nil {
 			panic(err)
 		}
+		fmt.Printf("Current Cost: %f\n", curCost)
 		return curCost
 	}
 	// gradfunc for optimization
@@ -54,10 +55,10 @@ func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector
 		if err != nil {
 			panic(err)
 		}
-		if len(curGrad) != len(grad) {
-			panic("Incorrect size of the gradient")
+		cdata := copy(grad, curGrad)
+		if len(curGrad) != cdata {
+			panic("Could not copy gradient")
 		}
-		grad = curGrad
 	}
 	// initialize parameters
 	var initWeights []float64
@@ -78,7 +79,7 @@ func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector
 	if err != nil {
 		return err
 	}
-	fmt.Printf("result.Status: %v\n", result.Status)
+	fmt.Printf("Result status: %s\n", result.Status)
 	return nil
 }
 
@@ -153,7 +154,6 @@ func Cost(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector)
 	if err != nil {
 		return -1.0, err
 	}
-	fmt.Printf("Cost: %f, Reg: %f\n", cost, reg)
 	return cost + reg, nil
 }
 
@@ -232,13 +232,15 @@ func Grad(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector)
 	for i := 1; i < len(layers); i++ {
 		deltas := layers[i].Deltas()
 		deltas.Scale(1/float64(samples), deltas)
-		gradReg, err := GradReg(n, i, c.Lambda, samples)
-		if err != nil {
-			return nil, err
+		if c.Lambda > 0 {
+			gradReg, err := GradReg(n, i, c.Lambda, samples)
+			if err != nil {
+				return nil, err
+			}
+			gradReg.Add(deltas, gradReg)
+			gradVec := matrix.Mx2Vec(gradReg, false)
+			gradient = append(gradient, gradVec...)
 		}
-		gradReg.Add(deltas, gradReg)
-		gradVec := matrix.Mx2Vec(gradReg, false)
-		gradient = append(gradient, gradVec...)
 	}
 	return gradient, nil
 }
