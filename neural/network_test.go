@@ -195,3 +195,5 @@ func TestBackProp(t *testing.T) {
 	err = net.BackProp(sampleVec.T(), errVec.T(), 100)
 	assert.Error(err)
 }
+
+func TestClassify(t *testing.T) {}

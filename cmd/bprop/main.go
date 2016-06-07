@@ -88,4 +88,19 @@ func main() {
 	if err := backprop.Train(net, c, features.(*mat64.Dense), labels.(*mat64.Vector)); err != nil {
 		fmt.Printf("Error training network: %s\n", err)
 	}
+	success, err := net.Validate(features.(*mat64.Dense), labels.(*mat64.Vector))
+	if err != nil {
+		fmt.Printf("Could not calculate success rate: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Neural net success: %f\n", success)
+	// let's classify the first row
+	sample := (features.(*mat64.Dense)).RowView(0).T()
+	classMx, err := net.Classify(sample)
+	if err != nil {
+		fmt.Printf("Could not classify sample: %s\n", err)
+		os.Exit(1)
+	}
+	fa := mat64.Formatted(classMx, mat64.Prefix(""))
+	fmt.Printf("Classification result:\n % v\n\n", fa)
 }
