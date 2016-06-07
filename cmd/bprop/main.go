@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"github.com/gonum/matrix/mat64"
-	"github.com/milosgajdos83/go-neural/dataset"
 	"github.com/milosgajdos83/go-neural/learn/backprop"
 	"github.com/milosgajdos83/go-neural/neural"
+	"github.com/milosgajdos83/go-neural/pkg/dataset"
 )
 
 var (
