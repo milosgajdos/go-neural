@@ -1,3 +1,5 @@
+**THIS PROJECT IS IN AN EXPERIMENTAL PHASE. CONSIDER YOURSELF WARNED ;-)**
+
 # go-neural
 
 This folder will [hopefully] contain some implementations of various Neural Networks learning algorithms. You cna find example[s] of particular learning algorithms in `cmd/` subfolders.

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	// FEEDFWD is a feed forwardf Neural Network
+	// FEEDFWD is a feed forward Neural Network
 	FEEDFWD NetworkKind = iota + 1
 )
 
@@ -26,7 +26,7 @@ func (nk NetworkKind) String() string {
 	}
 }
 
-// NetworkArch allows to specify network architecture to be created
+// NetworkArch represents Neural Network architecture
 type NetworkArch struct {
 	// Input layer size
 	Input int
@@ -36,19 +36,17 @@ type NetworkArch struct {
 	Output int
 }
 
-// Network represents a certain kind of Neural Network.
-// It has an id and can have arbitrary number of layers.
+// Network represents Neural Network
 type Network struct {
 	id     string
 	kind   NetworkKind
 	layers []*Layer
 }
 
-// NewNetwork creates new neural network and returns it
-// It accepts two parameters: netKind which represents what kind of neural network layer you want
-// to create and layerSizes which specify number of neurons in each layer.
+// NewNetwork creates new Neural Network based on the passed in parameters.
 // It fails with error if either the unsupported network kind has been requested or
-// if any of the network layers could not be created
+// if any of the neural network layers failed to be created. This can be due to
+// incorrect network architecture i.e. mismatched neural layer dimensions.
 func NewNetwork(netKind NetworkKind, netArch *NetworkArch) (*Network, error) {
 	// if network kind is unknown return error
 	if netKind.String() == "UNKNOWN" {
@@ -104,9 +102,10 @@ func (n Network) Layers() []*Layer {
 	return n.layers
 }
 
-// ForwardProp performs the forward propagation for agiven input matrix.
+// ForwardProp performs forward propagation for a given input up to a specified network layer.
 // It recursively activates all layers in the network and returns the output in a matrix
-// It fails with error if requested end layer index is out of all network layers
+// It fails with error if requested end layer index is beyond all available layers or if
+// the supplied input data is nil.
 func (n *Network) ForwardProp(inMx mat64.Matrix, toLayer int) (mat64.Matrix, error) {
 	if inMx == nil {
 		return nil, fmt.Errorf("Can't forward propagate input: %v\n", inMx)
@@ -138,10 +137,10 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 	return n.doForwardProp(out, from+1, to)
 }
 
-// BackProp performs back propagation of neural network and updates each layer's delta matrix
-// It traverses network recursively and calculates errors and updates deltas of each network layer.
-// It fails with error if either supplied input and error matrices are nil or from boundary goes
-// beyond the first network layer that can have errors calculated
+// BackProp performs back propagation of neural network. It traverses neural network recursively
+// and updates deltas of each network layer based on the layer error minimizin the network's objective func.
+// It fails with error if either the supplied input and delta matrices are nil or f the specified
+// from boundary goes beyond the first network layer that can have output errors calculated
 func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 	if inMx == nil {
 		return fmt.Errorf("Can't backpropagate input: %v\n", inMx)
@@ -216,7 +215,7 @@ func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
 	return n.doBackProp(inMx, gradMx, from-1, to)
 }
 
-// Classify classifies the provided data vector to a particular label
+// Classify classifies the provided data vector to a particular label class.
 // It returns a matrix that contains probabilities of the input belonging to a particular class
 // It returns error if the network forward propagation fails at any point during classification.
 func (n *Network) Classify(inMx mat64.Matrix) (mat64.Matrix, error) {
@@ -252,8 +251,8 @@ func (n *Network) Classify(inMx mat64.Matrix) (mat64.Matrix, error) {
 	return classMx, nil
 }
 
-// Validate runs validation data set through neural network.
-// It returns th percentage of successful classifications or error
+// Validate runs forward propagation on the validation data set through neural network.
+// It returns the percentage of successful classifications or error.
 func (n *Network) Validate(valInMx *mat64.Dense, valOut *mat64.Vector) (float64, error) {
 	// validation set can't be nil
 	if valInMx == nil || valOut == nil {

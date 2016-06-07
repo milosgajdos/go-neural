@@ -45,7 +45,6 @@ type NeuronFunc struct {
 }
 
 // Layer represents a Neural Network layer.
-// Layer holds weights matrix and layer output deltas matrices internally
 type Layer struct {
 	// id is Layer unique identifier within network
 	id string
@@ -63,7 +62,7 @@ type Layer struct {
 
 // NewLayer creates a new neural netowrk layer and returns it.
 // Layer weights are initialized to uniformly distributed random values (-1,1)
-// NewLayer fails with error if the supplied neural network does not exist.
+// NewLayer fails with error if the neural network supplied as a parameter does not exist.
 func NewLayer(layerKind LayerKind, net *Network, layerIn, layerOut int) (*Layer, error) {
 	if layerIn <= 0 || layerOut <= 0 {
 		return nil, fmt.Errorf("Invalid layer size requested: %d, %d\n", layerIn, layerOut)
@@ -115,10 +114,9 @@ func (l *Layer) Weights() *mat64.Dense {
 }
 
 // SetWeights allows to set layer weights.
-// It fails with error if the supplied weights have different dimension
+// It fails with error if either the supplied weights have different dimensions
 // than the existing layer weights or if the passed in weights matrix is nil
 // or if the layer is an INPUT layer: INPUT layer has no weights matrix.
-// SetWeights also modifies Deltas matrix to adjust it to the new weights dimensions.
 func (l *Layer) SetWeights(w *mat64.Dense) error {
 	// INPUT layer has no weights
 	if l.kind == INPUT {
@@ -142,14 +140,15 @@ func (l *Layer) SetWeights(w *mat64.Dense) error {
 	return nil
 }
 
-// Deltas returns layer's deltas matrix
+// Deltas returns layer's output deltas matrix
+// Deltas matrix is initialized to zeros and is only non-zero if the back propagation
+// algorithm has been run.
 func (l *Layer) Deltas() *mat64.Dense {
 	return l.deltas
 }
 
-// Out calculates output of the network layer for the given input
-// If the layer is INPUT layer, it returns the supplied input argument.
-//func (l *Layer) Out(inputMx mat64.Matrix) (*mat64.Dense, error) {
+// Out calculates output of the network layer for the given input.
+// If the layer is an INPUT layer, it returns the supplied input argument.
 func (l *Layer) Out(inputMx mat64.Matrix) (mat64.Matrix, error) {
 	// if input is nil, return error
 	if inputMx == nil {
@@ -181,8 +180,8 @@ func (l Layer) NeuronFunc() *NeuronFunc {
 }
 
 // SetNeuronFunc allows to set the layer's NeuronFunc
-// It fails with error if either the supplied function is nil or
-// the layer you are trying to change neuron function to is INPUT layer.
+// It fails with error if either the supplied parameter is nil or
+// the layer INPUT layerL INPUT layer has no activation units.
 func (l *Layer) SetNeuronFunc(nf *NeuronFunc) error {
 	// if nf is nil, don't set it
 	if nf == nil {

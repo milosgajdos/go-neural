@@ -23,10 +23,11 @@ type DataSet struct {
 	labeled bool
 }
 
-// NewDataSet returns *Data or fails with error if either the path to data set
+// NewDataSet returns new data set or fails with error if either the path to data set
 // supplied as a parameter does not exist or if the data set file is encoded
-// in an unsupported file format. File format is inferred from the file extension.
-// You can specify if the data set is labeled or not
+// in an unsupported format. File format is inferred from the file extension.
+// Currently only CSV files are supported. You can specify if the data set is labeled or not
+// In CSV context "labeled" means that the labels are the last column in the raw file
 func NewDataSet(path string, labeled bool) (*DataSet, error) {
 	// Check if the training data file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -67,10 +68,9 @@ func (ds DataSet) Data() mat64.Matrix {
 	return ds.mx
 }
 
-// Features returns features matrix from the underlying data matrix
-// Data features are considered to be stored in all but the last column of
-// the dataset matrix if the data set is labeled.
-/// If the dataset is not labeled Features returns the raw data matrix
+// Features returns features matrix from the underlying raw data matrix
+// Raw matrix contains both features and labels read from the data file.
+// If the dataset is not labeled the function returns the raw data matrix
 func (ds DataSet) Features() mat64.Matrix {
 	if !(ds.labeled) {
 		return ds.mx
