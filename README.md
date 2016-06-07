@@ -14,7 +14,8 @@ Backpropagation NN example uses a sample of 5000 images from [MNIST](http://yann
 The current code has been tested on Go 1.6. You can get it [here](https://storage.googleapis.com/golang/go1.6.2.darwin-amd64.pkg)
 
 ```
-time ./bprop -data /Users/milosgajdos/data.csv -labeled -lambda 5.0 -iters 80 -classes 10
+make
+time ./_build/bprop -labeled -data ./testdata/data.csv -lambda 5.0 -iters 80 -classes 10
 Current Cost: 6.824417
 Current Cost: 4.202914
 Current Cost: 3.265800
