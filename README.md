@@ -48,4 +48,4 @@ user    1m32.359s
 sys     0m6.385s
 ```
 
-You can see that the network whos 94% accuracy for the given parameters. We have classified a chosen input data to 10 different classes out of which the last one shows the highest probability.
+You can see that the network has 94% accuracy for the given parameters on the training set. We have classified a chosen input data to 10 different classes out of which the last one shows the highest probability.
