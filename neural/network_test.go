@@ -196,4 +196,78 @@ func TestBackProp(t *testing.T) {
 	assert.Error(err)
 }
 
-func TestClassify(t *testing.T) {}
+func TestClassify(t *testing.T) {
+	assert := assert.New(t)
+	// create features matrix
+	features := []float64{5.1, 3.5, 1.4, 0.2,
+		4.9, 3.0, 1.4, 0.2,
+		4.7, 3.2, 1.3, 0.2,
+		4.6, 3.1, 1.5, 0.2,
+		5.0, 3.6, 1.4, 0.2}
+	inMx := mat64.NewDense(5, 4, features)
+	// create test network
+	inRows, inCols := inMx.Dims()
+	hiddenLayers := []int{5}
+	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
+	net, err := NewNetwork(FEEDFWD, na)
+	assert.NotNil(net)
+	assert.NoError(err)
+	// classify the features input
+	out, err := net.Classify(inMx)
+	assert.NotNil(net)
+	assert.NoError(err)
+	oRows, oCols := out.Dims()
+	assert.Equal(oRows, inRows)
+	assert.Equal(oCols, na.Output)
+	// pass a vector in
+	tstIn := inMx.RowView(0).T()
+	out, err = net.Classify(tstIn)
+	assert.NotNil(net)
+	assert.NoError(err)
+	oRows, oCols = out.Dims()
+	assert.Equal(oRows, 1)
+	assert.Equal(oCols, na.Output)
+	// nil input throws error
+	out, err = net.Classify(nil)
+	assert.Nil(out)
+	assert.Error(err)
+	// invalid network
+	net = new(Network)
+	out, err = net.Classify(tstIn)
+	assert.Nil(out)
+	assert.Error(err)
+}
+
+func TestValidate(t *testing.T) {
+	assert := assert.New(t)
+	// create features matrix
+	features := []float64{5.1, 3.5, 1.4, 0.2,
+		4.9, 3.0, 1.4, 0.2,
+		4.7, 3.2, 1.3, 0.2,
+		4.6, 3.1, 1.5, 0.2,
+		5.0, 3.6, 1.4, 0.2}
+	inMx := mat64.NewDense(5, 4, features)
+	// create test network
+	_, inCols := inMx.Dims()
+	hiddenLayers := []int{5}
+	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
+	net, err := NewNetwork(FEEDFWD, na)
+	assert.NotNil(net)
+	assert.NoError(err)
+	// expected labels
+	expVal := []float64{2, 1, 3, 2, 4}
+	expVec := mat64.NewVector(len(expVal), expVal)
+	// run validation
+	success, err := net.Validate(inMx, expVec)
+	assert.NoError(err)
+	assert.True(success < 100.0)
+	// nil input throws error
+	success, err = net.Validate(nil, expVec)
+	assert.Error(err)
+	assert.True(success == 0.0)
+	// invalid network
+	net = new(Network)
+	success, err = net.Validate(inMx, expVec)
+	assert.True(success == 0.0)
+	assert.Error(err)
+}

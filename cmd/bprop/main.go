@@ -101,6 +101,6 @@ func main() {
 		fmt.Printf("Could not classify sample: %s\n", err)
 		os.Exit(1)
 	}
-	fa := mat64.Formatted(classMx, mat64.Prefix(""))
-	fmt.Printf("Classification result:\n % v\n\n", fa)
+	fa := mat64.Formatted(classMx.T(), mat64.Prefix(""))
+	fmt.Printf("Classification result:\n% v\n\n", fa)
 }
