@@ -15,5 +15,7 @@ clean:
 	rm -rf $(BUILDPATH)
 build:
 	mkdir -p $(BUILDPATH)
+test:
+	go test -cover $$(go list ./... | grep -v /vendor/)
 
 .PHONY: clean build
