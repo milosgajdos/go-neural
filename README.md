@@ -32,7 +32,7 @@ Current Cost: 0.511507
 Current Cost: 0.509390
 Result status: IterationLimit
 
-Neural net success: 94.220000
+Neural net accuracy: 94.220000
 
 Classification result:
 ⎡ 0.00653138058035365⎤

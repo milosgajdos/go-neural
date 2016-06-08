@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/milosgajdos83/go-neural/pkg/matrix"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,28 +26,37 @@ func TestNetworkKinds(t *testing.T) {
 
 func TestNewNetwork(t *testing.T) {
 	assert := assert.New(t)
+	// basic configuration settings
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
+	na := &NetworkArch{Input: 0, Hidden: nil, Output: 100}
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
 	// unknown network
-	n, err := NewNetwork(NetworkKind(10000), new(NetworkArch))
+	c.Kind = NetworkKind(10000)
+	n, err := NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
 	// nil architecture
-	n, err = NewNetwork(FEEDFWD, nil)
+	c.Kind = FEEDFWD
+	c.Arch = nil
+	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
 	// zero size INPUT layer
-	na := &NetworkArch{Input: 0, Hidden: nil, Output: 100}
-	n, err = NewNetwork(FEEDFWD, na)
+	c.Arch = na
+	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
 	// negative output layer
 	na = &NetworkArch{Input: 10, Hidden: nil, Output: -100}
-	n, err = NewNetwork(FEEDFWD, na)
+	c.Arch = na
+	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
 	// correct architecture
 	hidden := []int{20, 10}
 	na = &NetworkArch{Input: 10, Hidden: hidden, Output: 10}
-	n, err = NewNetwork(FEEDFWD, na)
+	c.Arch = na
+	n, err = NewNetwork(c)
 	assert.NotNil(n)
 	assert.NoError(err)
 }
@@ -54,9 +64,11 @@ func TestNewNetwork(t *testing.T) {
 func TestID(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hidden := []int{20, 10}
 	na := &NetworkArch{Input: 10, Hidden: hidden, Output: 10}
-	n, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	n, err := NewNetwork(c)
 	assert.NotNil(n)
 	assert.NoError(err)
 	assert.Len(n.ID(), 10)
@@ -65,9 +77,11 @@ func TestID(t *testing.T) {
 func TestKind(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hidden := []int{20, 10}
 	na := &NetworkArch{Input: 10, Hidden: hidden, Output: 10}
-	n, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	n, err := NewNetwork(c)
 	assert.NotNil(n)
 	assert.NoError(err)
 	assert.Equal(n.Kind(), FEEDFWD)
@@ -76,9 +90,11 @@ func TestKind(t *testing.T) {
 func TestLayers(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hidden := []int{20, 10}
 	na := &NetworkArch{Input: 10, Hidden: hidden, Output: 10}
-	n, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	n, err := NewNetwork(c)
 	assert.NotNil(n)
 	assert.NoError(err)
 	layers := n.Layers()
@@ -105,11 +121,13 @@ func TestForwardProp(t *testing.T) {
 		4.6, 3.1, 1.5, 0.2,
 		5.0, 3.6, 1.4, 0.2}
 	inMx := mat64.NewDense(5, 4, features)
-	// create test network
 	inRows, inCols := inMx.Dims()
+	// create test network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hiddenLayers := []int{5}
 	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
-	net, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	net, err := NewNetwork(c)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// retrieve layers
@@ -159,11 +177,13 @@ func TestBackProp(t *testing.T) {
 		4.6, 3.1, 1.5, 0.2,
 		5.0, 3.6, 1.4, 0.2}
 	inMx := mat64.NewDense(5, 4, features)
-	// create test network
 	_, inCols := inMx.Dims()
+	// create test network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hiddenLayers := []int{5}
 	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
-	net, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	net, err := NewNetwork(c)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// retrieve layers
@@ -205,11 +225,13 @@ func TestClassify(t *testing.T) {
 		4.6, 3.1, 1.5, 0.2,
 		5.0, 3.6, 1.4, 0.2}
 	inMx := mat64.NewDense(5, 4, features)
-	// create test network
 	inRows, inCols := inMx.Dims()
+	// create test network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hiddenLayers := []int{5}
 	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
-	net, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	net, err := NewNetwork(c)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// classify the features input
@@ -247,11 +269,13 @@ func TestValidate(t *testing.T) {
 		4.6, 3.1, 1.5, 0.2,
 		5.0, 3.6, 1.4, 0.2}
 	inMx := mat64.NewDense(5, 4, features)
-	// create test network
 	_, inCols := inMx.Dims()
+	// create test network
+	nf := &NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hiddenLayers := []int{5}
 	na := &NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: 5}
-	net, err := NewNetwork(FEEDFWD, na)
+	c := &Config{Kind: FEEDFWD, Arch: na, ActFunc: nf}
+	net, err := NewNetwork(c)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// expected labels

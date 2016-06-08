@@ -17,8 +17,8 @@ const (
 type NetworkKind uint
 
 // String implements Stringer interface for pretty printing
-func (nk NetworkKind) String() string {
-	switch nk {
+func (n NetworkKind) String() string {
+	switch n {
 	case FEEDFWD:
 		return "FEEDFWD"
 	default:
@@ -36,6 +36,16 @@ type NetworkArch struct {
 	Output int
 }
 
+// Config provides Neural Network configuration
+type Config struct {
+	// Kind is Neural Network type
+	Kind NetworkKind
+	// Arch specifies Neural Network architecture
+	Arch *NetworkArch
+	// ActFunc specifies Neural Network activation functions
+	ActFunc *NeuronFunc
+}
+
 // Network represents Neural Network
 type Network struct {
 	id     string
@@ -47,29 +57,29 @@ type Network struct {
 // It fails with error if either the unsupported network kind has been requested or
 // if any of the neural network layers failed to be created. This can be due to
 // incorrect network architecture i.e. mismatched neural layer dimensions.
-func NewNetwork(netKind NetworkKind, netArch *NetworkArch) (*Network, error) {
+func NewNetwork(c *Config) (*Network, error) {
 	// if network kind is unknown return error
-	if netKind.String() == "UNKNOWN" {
-		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", netKind)
+	if c.Kind.String() == "UNKNOWN" {
+		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", c.Kind)
 	}
 	// you must supply network architecture
-	if netArch == nil {
-		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", netArch)
+	if c.Arch == nil {
+		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", c.Arch)
 	}
 	net := &Network{}
 	net.id = helpers.PseudoRandString(10)
-	net.kind = netKind
+	net.kind = c.Kind
 	// Initialize INPUT layer: Input and Output layers are the same
-	inLayer, err := NewLayer(INPUT, net, netArch.Input, netArch.Input)
+	inLayer, err := NewLayer(INPUT, net, nil, c.Arch.Input, c.Arch.Input)
 	if err != nil {
 		return nil, err
 	}
 	net.layers = append(net.layers, inLayer)
 	// layer input size set to INPUT as that's the first layer in to first HIDDEN layer
-	layerInSize := netArch.Input
+	layerInSize := c.Arch.Input
 	// create HIDDEN layers
-	for _, hiddenSize := range netArch.Hidden {
-		layer, err := NewLayer(HIDDEN, net, layerInSize, hiddenSize)
+	for _, hiddenSize := range c.Arch.Hidden {
+		layer, err := NewLayer(HIDDEN, net, c.ActFunc, layerInSize, hiddenSize)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +88,7 @@ func NewNetwork(netKind NetworkKind, netArch *NetworkArch) (*Network, error) {
 		layerInSize = hiddenSize
 	}
 	// Create OUTPUT layer
-	outLayer, err := NewLayer(OUTPUT, net, layerInSize, netArch.Output)
+	outLayer, err := NewLayer(OUTPUT, net, c.ActFunc, layerInSize, c.Arch.Output)
 	if err != nil {
 		return nil, err
 	}

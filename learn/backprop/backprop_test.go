@@ -25,14 +25,16 @@ func setup() {
 		4.6, 3.1, 1.5, 0.4,
 		5.0, 3.6, 1.4, 0.5}
 	inMx = mat64.NewDense(5, 4, features)
+	_, inCols := inMx.Dims()
 	labels := []float64{2.0, 1.0, 3.0, 2.0, 4.0}
 	labelsVec = mat64.NewVector(len(labels), labels)
 	// create test network
-	_, inCols := inMx.Dims()
+	nf := &neural.NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
 	hiddenLayers := []int{5}
 	na := &neural.NetworkArch{Input: inCols, Hidden: hiddenLayers, Output: len(labels)}
+	c := &neural.Config{Kind: neural.FEEDFWD, Arch: na, ActFunc: nf}
 	var err error
-	net, err = neural.NewNetwork(neural.FEEDFWD, na)
+	net, err = neural.NewNetwork(c)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/milosgajdos83/go-neural/learn/backprop"
 	"github.com/milosgajdos83/go-neural/neural"
 	"github.com/milosgajdos83/go-neural/pkg/dataset"
+	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
 
 var (
@@ -78,8 +79,10 @@ func main() {
 	_, colsIn := features.Dims()
 	hiddenLayers := []int{25}
 	// we will classify the output to number of specified classes
-	netArch := &neural.NetworkArch{Input: colsIn, Hidden: hiddenLayers, Output: classes}
-	net, err := neural.NewNetwork(neural.FEEDFWD, netArch)
+	nf := &neural.NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
+	arch := &neural.NetworkArch{Input: colsIn, Hidden: hiddenLayers, Output: classes}
+	netConfig := &neural.Config{Kind: neural.FEEDFWD, Arch: arch, ActFunc: nf}
+	net, err := neural.NewNetwork(netConfig)
 	if err != nil {
 		fmt.Printf("Error creating network: %s\n", err)
 		os.Exit(1)
@@ -93,7 +96,7 @@ func main() {
 		fmt.Printf("Could not calculate success rate: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Neural net success: %f\n", success)
+	fmt.Printf("\nNeural net accuracy: %f\n", success)
 	// let's classify the first row
 	sample := (features.(*mat64.Dense)).RowView(0).T()
 	classMx, err := net.Classify(sample)
@@ -102,5 +105,5 @@ func main() {
 		os.Exit(1)
 	}
 	fa := mat64.Formatted(classMx.T(), mat64.Prefix(""))
-	fmt.Printf("Classification result:\n% v\n\n", fa)
+	fmt.Printf("\nClassification result:\n% v\n\n", fa)
 }

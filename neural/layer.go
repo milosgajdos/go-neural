@@ -17,6 +17,15 @@ const (
 	OUTPUT
 )
 
+// ActivationFn defines a neuron activation function
+type ActivationFn func(int, int, float64) float64
+
+// NeuronFunc provides activation functions for forward and back propagation
+type NeuronFunc struct {
+	ForwFn ActivationFn
+	BackFn ActivationFn
+}
+
 // LayerKind defines type of neural network layer
 // There are three kinds available: INPUT, HIDDEN and OUTPUT
 type LayerKind uint
@@ -33,15 +42,6 @@ func (l LayerKind) String() string {
 	default:
 		return "UNKNOWN"
 	}
-}
-
-// ActivationFn defines a neuron activation function
-type ActivationFn func(int, int, float64) float64
-
-// NeuronFunc provides activation functions for forward and back propagation
-type NeuronFunc struct {
-	ForwFn ActivationFn
-	BackFn ActivationFn
 }
 
 // Layer represents a Neural Network layer.
@@ -63,7 +63,8 @@ type Layer struct {
 // NewLayer creates a new neural network layer and returns it.
 // Layer weights are initialized to uniformly distributed random values (-1,1)
 // NewLayer fails with error if the neural network supplied as a parameter does not exist.
-func NewLayer(layerKind LayerKind, net *Network, layerIn, layerOut int) (*Layer, error) {
+func NewLayer(layerKind LayerKind, net *Network, nf *NeuronFunc,
+	layerIn, layerOut int) (*Layer, error) {
 	if layerIn <= 0 || layerOut <= 0 {
 		return nil, fmt.Errorf("Invalid layer size requested: %d, %d\n", layerIn, layerOut)
 	}
@@ -81,6 +82,9 @@ func NewLayer(layerKind LayerKind, net *Network, layerIn, layerOut int) (*Layer,
 	layer.net = net
 	// INPUT layer has neither weights matrix nor activation funcs
 	if layerKind != INPUT {
+		if nf == nil {
+			return nil, fmt.Errorf("Incorrect Activation function supplied: %v\n", nf)
+		}
 		// initialize weights to random values
 		var err error
 		layer.weights, err = matrix.MakeRandMx(layerOut, layerIn+1, 0.0, 1.0)
