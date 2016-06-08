@@ -4,7 +4,7 @@ INSTALL=go install
 SRCPATH=./cmd
 BUILDPATH=./_build
 
-bprop: build
+bprop: test build
 	$(BUILD) -v -o $(BUILDPATH)/bprop $(SRCPATH)/bprop
 
 all: build bprop

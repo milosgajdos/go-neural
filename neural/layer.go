@@ -60,7 +60,7 @@ type Layer struct {
 	activFunc *NeuronFunc
 }
 
-// NewLayer creates a new neural netowrk layer and returns it.
+// NewLayer creates a new neural network layer and returns it.
 // Layer weights are initialized to uniformly distributed random values (-1,1)
 // NewLayer fails with error if the neural network supplied as a parameter does not exist.
 func NewLayer(layerKind LayerKind, net *Network, layerIn, layerOut int) (*Layer, error) {

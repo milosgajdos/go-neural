@@ -1,6 +1,9 @@
-**THIS PROJECT IS IN AN EXPERIMENTAL PHASE. CONSIDER YOURSELF WARNED ;-)**
-
 # go-neural
+
+[![GoDoc](https://godoc.org/github.com/milosgajdos83/go-neural?status.svg)](https://godoc.org/github.com/milosgajdos83/go-neural)
+[![License](https://img.shields.io/:license-apache-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Travis CI](https://travis-ci.org/milosgajdos83/go-neural.svg?branch=master)](https://travis-ci.org/milosgajdos83/go-neural)
+[![Go Report Card](https://goreportcard.com/badge/milosgajdos83/go-neural)](https://goreportcard.com/report/github.com/milosgajdos83/go-neural)
 
 This folder will [hopefully] contain some implementations of various Neural Networks learning algorithms. You cna find example[s] of particular learning algorithms in `cmd/` subfolders.
 Currently the repo only contains a basic implementation of backpropagation algorithm for 3 layers Neural Network classifier with 10 different labels.
