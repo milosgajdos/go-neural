@@ -3,6 +3,7 @@ CLEAN=go clean
 INSTALL=go install
 SRCPATH=./cmd
 BUILDPATH=./_build
+PACKAGES=$(shell go list ./... | grep -v /vendor/)
 
 bprop: test build
 	$(BUILD) -v -o $(BUILDPATH)/bprop $(SRCPATH)/bprop
@@ -16,6 +17,8 @@ clean:
 build:
 	mkdir -p $(BUILDPATH)
 test:
-	go test -cover $$(go list ./... | grep -v /vendor/)
+	for pkg in ${PACKAGES}; do \
+		go test -coverprofile="../../../$$pkg/coverage.txt" -covermode=atomic $$pkg || exit; \
+	done
 
 .PHONY: clean build
