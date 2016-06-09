@@ -13,6 +13,11 @@ const (
 	FEEDFWD NetworkKind = iota + 1
 )
 
+// supported neural network types
+var supported = map[NetworkKind]func(*Config) (*Network, error){
+	FEEDFWD: createFeedFwdNetwork,
+}
+
 // NetworkKind defines a type of neural network
 type NetworkKind uint
 
@@ -58,10 +63,16 @@ type Network struct {
 // if any of the neural network layers failed to be created. This can be due to
 // incorrect network architecture i.e. mismatched neural layer dimensions.
 func NewNetwork(c *Config) (*Network, error) {
-	// if network kind is unknown return error
-	if c.Kind.String() == "UNKNOWN" {
+	createNet, ok := supported[c.Kind]
+	if !ok {
 		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", c.Kind)
 	}
+	// return network
+	return createNet(c)
+}
+
+// createFeedFwdNetwork creates feedforward neural network or fails with error
+func createFeedFwdNetwork(c *Config) (*Network, error) {
 	// you must supply network architecture
 	if c.Arch == nil {
 		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", c.Arch)
@@ -93,7 +104,6 @@ func NewNetwork(c *Config) (*Network, error) {
 		return nil, err
 	}
 	net.layers = append(net.layers, outLayer)
-	// return network
 	return net, nil
 }
 
