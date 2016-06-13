@@ -21,6 +21,7 @@ const (
 type ActivationFn func(int, int, float64) float64
 
 // NeuronFunc provides activation functions for forward and back propagation
+// TODO: specify activation function per layer
 type NeuronFunc struct {
 	ForwFn ActivationFn
 	BackFn ActivationFn
@@ -82,9 +83,6 @@ func NewLayer(layerKind LayerKind, net *Network, nf *NeuronFunc,
 	layer.net = net
 	// INPUT layer has neither weights matrix nor activation funcs
 	if layerKind != INPUT {
-		if nf == nil {
-			return nil, fmt.Errorf("Incorrect Activation function supplied: %v\n", nf)
-		}
 		// initialize weights to random values
 		var err error
 		layer.weights, err = matrix.MakeRandMx(layerOut, layerIn+1, 0.0, 1.0)
@@ -93,10 +91,24 @@ func NewLayer(layerKind LayerKind, net *Network, nf *NeuronFunc,
 		}
 		// initializes deltas to zero values
 		layer.deltas = mat64.NewDense(layerOut, layerIn+1, nil)
-		// TODO: parameterize activation functions
+	}
+	// Set activation function for HIDDEN layer
+	if layerKind == HIDDEN {
+		if nf == nil {
+			return nil, fmt.Errorf("Incorrect Activation function supplied: %v\n", nf)
+		}
+		// set activation functions
+		layer.activFunc = nf
+	}
+	// Set activation function for OUTPUT layer
+	if layerKind == OUTPUT {
+		if nf == nil {
+			return nil, fmt.Errorf("Incorrect Activation function supplied: %v\n", nf)
+		}
+		// set activation functions
 		layer.activFunc = &NeuronFunc{
-			ForwFn: matrix.SigmoidMx,
-			BackFn: matrix.SigmoidGradMx,
+			ForwFn: matrix.ExpMx,
+			BackFn: nf.BackFn,
 		}
 	}
 	return layer, nil
@@ -163,7 +175,7 @@ func (l *Layer) Out(inputMx mat64.Matrix) (mat64.Matrix, error) {
 		return inputMx, nil
 	}
 	// input column dimensions + bias must match the weights column dimensions
-	_, inCols := inputMx.Dims()
+	inRows, inCols := inputMx.Dims()
 	_, wCols := l.weights.Dims()
 	if inCols+1 != wCols {
 		return nil, fmt.Errorf("Dimension mismatch. Weights: %d, Input: %d\n", wCols, inCols)
@@ -175,6 +187,14 @@ func (l *Layer) Out(inputMx mat64.Matrix) (mat64.Matrix, error) {
 	out.Mul(biasInMx, l.weights.T())
 	// activate layer neurons
 	out.Apply(l.activFunc.ForwFn, out)
+	if l.kind == OUTPUT {
+		rowSums := matrix.RowSums(out)
+		for i := 0; i < inRows; i++ {
+			rowVec := out.RowView(i)
+			rowVec.ScaleVec(1/rowSums[i], rowVec)
+			out.SetRow(i, rowVec.RawVector().Data)
+		}
+	}
 	return out, nil
 }
 
