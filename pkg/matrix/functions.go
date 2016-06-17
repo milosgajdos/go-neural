@@ -63,6 +63,12 @@ func TanhGradMx(i, j int, x float64) float64 {
 	return 1.0 - (math.Tanh(x) * math.Tanh(x))
 }
 
+// TanhOutMx re-scales sigmoid function so that Tanh can be used in
+// Output layer for neural network classifiers
+func TanhOutMx(i, j int, x float64) float64 {
+	return 0.5 * (math.Tanh(x) + 1.0)
+}
+
 // ReluMx allows to apply Relu to all matrix elements
 func ReluMx(i, j int, x float64) float64 {
 	if x > 0.0 {

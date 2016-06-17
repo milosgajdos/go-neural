@@ -9,14 +9,20 @@ import (
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
 
+// optim maps string alg names to optim package data structures
+var optim = map[string]optimize.Method{
+	"bfgs": &optimize.BFGS{},
+}
+
 // Config allows to supply back propagation learning parameters
 type Config struct {
-	// Weights contain neural network weights
-	// rolled into slice
+	// Weights contain all neural network layer weights rolled into slice
 	Weights []float64
-	// Lambda is a cost regularization parameter
+	// Optim specifies optimization method
+	Optim string
+	// Lambda is a regularization cost parameter
 	Lambda float64
-	// Labels number of classifications labels
+	// Labels provides a number of classifications labels
 	Labels int
 	// Iters is the number of training iterations
 	Iters int
@@ -26,6 +32,14 @@ type Config struct {
 // It returns error if the training fails or any of the supplied parameters are incorrect
 // It panics if either objective function cost or gradient calculations fail with error
 func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector) error {
+	// network can't be empty
+	if n == nil {
+		return fmt.Errorf("Invalid neural network supplied: %v\n", n)
+	}
+	// network must be feedforward
+	if n.Kind() != neural.FEEDFWD {
+		return fmt.Errorf("Backpropagaion cant train supplied network: %s\n", n.Kind())
+	}
 	// Features matrix can't be nil
 	if inMx == nil {
 		return fmt.Errorf("Incorrect input supplied: %v\n", inMx)
@@ -75,7 +89,7 @@ func Train(n *neural.Network, c *Config, inMx *mat64.Dense, expOut *mat64.Vector
 	settings.Recorder = nil
 	settings.FunctionConverge = nil
 	settings.MajorIterations = c.Iters
-	result, err := optimize.Local(p, initWeights, settings, &optimize.BFGS{})
+	result, err := optimize.Local(p, initWeights, settings, optim[c.Optim])
 	if err != nil {
 		return err
 	}
@@ -88,6 +102,10 @@ func ValidateConfig(c *Config) error {
 	// config can't be nil
 	if c == nil {
 		return fmt.Errorf("Incorrect configuration supplied: %v\n", c)
+	}
+	// if the optimization method is not supported
+	if _, ok := optim[c.Optim]; !ok {
+		return fmt.Errorf("Optimization method not supported: %s\n", c.Optim)
 	}
 	// incorrect number of labels
 	if c.Labels <= 0 {

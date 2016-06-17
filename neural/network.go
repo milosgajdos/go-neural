@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/helpers"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
@@ -13,9 +14,14 @@ const (
 	FEEDFWD NetworkKind = iota + 1
 )
 
+// kindMap maps strings to NetworkKind
+var netKind = map[string]NetworkKind{
+	"feedfwd": FEEDFWD,
+}
+
 // supported neural network types
-var supported = map[NetworkKind]func(*Config) (*Network, error){
-	FEEDFWD: createFeedFwdNetwork,
+var supported = map[string]func(*config.NetConfig) (*Network, error){
+	"feedfwd": createFeedFwdNetwork,
 }
 
 // NetworkKind defines a type of neural network
@@ -31,26 +37,6 @@ func (n NetworkKind) String() string {
 	}
 }
 
-// NetworkArch represents Neural Network architecture
-type NetworkArch struct {
-	// Input layer size
-	Input int
-	// Hidden layers' sizes
-	Hidden []int
-	// Output layer size
-	Output int
-}
-
-// Config provides Neural Network configuration
-type Config struct {
-	// Kind is Neural Network type
-	Kind NetworkKind
-	// Arch specifies Neural Network architecture
-	Arch *NetworkArch
-	// ActFunc specifies Neural Network activation functions
-	ActFunc *NeuronFunc
-}
-
 // Network represents Neural Network
 type Network struct {
 	id     string
@@ -62,44 +48,47 @@ type Network struct {
 // It fails with error if either the unsupported network kind has been requested or
 // if any of the neural network layers failed to be created. This can be due to
 // incorrect network architecture i.e. mismatched neural layer dimensions.
-func NewNetwork(c *Config) (*Network, error) {
+func NewNetwork(c *config.NetConfig) (*Network, error) {
+	if c == nil {
+		return nil, fmt.Errorf("Invalid config supplied: %v\n", c)
+	}
+	// check if the requested network is supported
 	createNet, ok := supported[c.Kind]
 	if !ok {
-		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", c.Kind)
+		return nil, fmt.Errorf("Unsupported neural network type: %s\n", c.Kind)
 	}
 	// return network
 	return createNet(c)
 }
 
 // createFeedFwdNetwork creates feedforward neural network or fails with error
-func createFeedFwdNetwork(c *Config) (*Network, error) {
+func createFeedFwdNetwork(c *config.NetConfig) (*Network, error) {
 	// you must supply network architecture
 	if c.Arch == nil {
 		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", c.Arch)
 	}
 	net := &Network{}
 	net.id = helpers.PseudoRandString(10)
-	net.kind = c.Kind
-	// Initialize INPUT layer: Input and Output layers are the same
-	inLayer, err := NewLayer(INPUT, net, nil, c.Arch.Input, c.Arch.Input)
+	net.kind = netKind[c.Kind]
+	// Create INPUT layer: feedfwd network INPUT layer has no activation function
+	layerInSize := c.Arch.Input.Size
+	inLayer, err := NewLayer(net, c.Arch.Input, c.Arch.Input.Size)
 	if err != nil {
 		return nil, err
 	}
 	net.layers = append(net.layers, inLayer)
-	// layer input size set to INPUT as that's the first layer in to first HIDDEN layer
-	layerInSize := c.Arch.Input
 	// create HIDDEN layers
-	for _, hiddenSize := range c.Arch.Hidden {
-		layer, err := NewLayer(HIDDEN, net, c.ActFunc, layerInSize, hiddenSize)
+	for _, layerConfig := range c.Arch.Hidden {
+		layer, err := NewLayer(net, layerConfig, layerInSize)
 		if err != nil {
 			return nil, err
 		}
 		net.layers = append(net.layers, layer)
 		// layerInSize is set to output of the previous layer
-		layerInSize = hiddenSize
+		layerInSize = layerConfig.Size
 	}
 	// Create OUTPUT layer
-	outLayer, err := NewLayer(OUTPUT, net, c.ActFunc, layerInSize, c.Arch.Output)
+	outLayer, err := NewLayer(net, c.Arch.Output, layerInSize)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +219,7 @@ func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
 	biasActInMx := matrix.AddBias(actInMx)
 	gradMx := new(mat64.Dense)
 	gradMx.Mul(biasActInMx, weightsErrMx.T())
-	gradMx.Apply(weightsErrLayer.NeuronFunc().BackFn, gradMx)
+	gradMx.Apply(weightsErrLayer.ActGradFn(), gradMx)
 	gradMx.MulElem(layeErr.T(), gradMx)
 	return n.doBackProp(inMx, gradMx, from-1, to)
 }
