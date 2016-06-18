@@ -71,10 +71,10 @@ func TanhOutMx(i, j int, x float64) float64 {
 
 // ReluMx allows to apply Relu to all matrix elements
 func ReluMx(i, j int, x float64) float64 {
-	if x > 0.0 {
+	if x > 0 {
 		return x
 	}
-	return 0.0
+	return 0.1 * x
 }
 
 // ReluGradMx provides Relu a "derlivation" used in backpropagation algorithm
@@ -82,5 +82,5 @@ func ReluGradMx(i, j int, x float64) float64 {
 	if x > 0.0 {
 		return 1.0
 	}
-	return 0.0
+	return 0.1
 }

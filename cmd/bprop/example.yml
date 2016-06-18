@@ -5,13 +5,13 @@ layers:
     size: 400
   hidden:
     size: [25]
-    activation: tanh
+    activation: relu
   output:
     size: 10
-    activation: tanh
+    activation: softmax
 training:
   kind: backprop
   params: "lambda=1.0"
 optimize:
   method: bfgs
-  iterations: 173
+  iterations: 82
