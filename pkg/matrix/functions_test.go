@@ -211,7 +211,7 @@ func TestReluMx(t *testing.T) {
 		data     []float64
 		expected bool
 	}{
-		{[]float64{0.0, 20.0, 0.0}, true},
+		{[]float64{0.0, 20.0, -0.1}, true},
 		{[]float64{0.0, 1.2, 0.1}, false},
 	}
 
@@ -235,7 +235,7 @@ func TestReluGradMx(t *testing.T) {
 		data     []float64
 		expected bool
 	}{
-		{[]float64{0.0, 1.0, 0.0}, true},
+		{[]float64{0.1, 1.0, 0.1}, true},
 		{[]float64{0.0, 1.2, 0.1}, false},
 	}
 

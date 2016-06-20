@@ -147,8 +147,8 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 }
 
 // BackProp performs back propagation of neural network. It traverses neural network recursively
-// and updates deltas of each network layer based on the layer error minimizin the network's objective func.
-// It fails with error if either the supplied input and delta matrices are nil or f the specified
+// from layer specified via parameter and calculates error deltas for each network layer.
+// It fails with error if either the supplied input and delta matrices are nil or if the specified
 // from boundary goes beyond the first network layer that can have output errors calculated
 func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 	if inMx == nil {
@@ -165,8 +165,7 @@ func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 		return fmt.Errorf("Cant backpropagate beyond first layer: %d\n", len(layers))
 	}
 	// perform the actual back propagation till the first hidden layer
-	n.doBackProp(inMx, deltaMx, fromLayer, 1)
-	return nil
+	return n.doBackProp(inMx, deltaMx, fromLayer, 1)
 }
 
 // doBackProp performs the actual backpropagation
@@ -176,17 +175,18 @@ func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
 	// pick deltas layer
 	deltasLayer := layers[from]
 	bpDeltasMx := deltasLayer.Deltas()
+	//update Deltas
+	outMx, err := n.ForwardProp(inMx, from-1)
+	if err != nil {
+		return err
+	}
+	outMxBias := matrix.AddBias(outMx)
+	dMx := new(mat64.Dense)
+	dMx.Mul(deltaMx.T(), outMxBias)
+	// update deltas
+	bpDeltasMx.Add(bpDeltasMx, dMx)
 	// If we reach the 1st hidden layer we return
 	if from == to {
-		outMx, err := n.ForwardProp(inMx, from-1)
-		if err != nil {
-			return err
-		}
-		outMxBias := matrix.AddBias(outMx)
-		dMx := new(mat64.Dense)
-		dMx.Mul(deltaMx.T(), outMxBias)
-		// update deltas
-		bpDeltasMx.Add(bpDeltasMx, dMx)
 		return nil
 	}
 	// pick weights layer
@@ -195,16 +195,6 @@ func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
 	// pick errLayer
 	weightsErrLayer := layers[from-1]
 	weightsErrMx := weightsErrLayer.Weights()
-	// forward propagate to from layer
-	outMx, err := n.ForwardProp(inMx, from-1)
-	if err != nil {
-		return err
-	}
-	// add Bias unit
-	biasOutMx := matrix.AddBias(outMx)
-	dMx := new(mat64.Dense)
-	dMx.Mul(deltaMx.T(), biasOutMx)
-	bpDeltasMx.Add(bpDeltasMx, dMx)
 	// errTmp holds layer error not accounting for bias
 	errTmpMx := new(mat64.Dense)
 	errTmpMx.Mul(bpWeightsMx.T(), deltaMx.T())
