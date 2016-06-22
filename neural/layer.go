@@ -49,8 +49,6 @@ type Layer struct {
 	id string
 	// kind is layer kind: input, hidden or output
 	kind LayerKind
-	// net is a neural network this layer is part off
-	net *Network
 	// weights matrix holds layer neuron weights per row
 	weights *mat64.Dense
 	// deltas matrix holds output deltas used for backprop
@@ -66,15 +64,10 @@ type Layer struct {
 // NewLayer creates a new neural network layer and returns it.
 // Layer weights are initialized to uniformly distributed random values (-1,1)
 // NewLayer fails with error if the neural network supplied as a parameter does not exist.
-func NewLayer(net *Network, c *config.LayerConfig, layerIn int) (*Layer, error) {
+func NewLayer(c *config.LayerConfig, layerIn int) (*Layer, error) {
 	if layerIn <= 0 || c.Size <= 0 {
 		return nil, fmt.Errorf("Layer size must be positive integer. Out: %d, In: %d\n",
 			c.Size, layerIn)
-	}
-	layerOut := c.Size
-	// Layer must belong to an existing Neural Network
-	if net == nil || net.ID() == "" {
-		return nil, fmt.Errorf("Invalid neural network: %v\n", net)
 	}
 	// Layer kind must be valid
 	if _, ok := layerKind[c.Kind]; !ok {
@@ -83,7 +76,6 @@ func NewLayer(net *Network, c *config.LayerConfig, layerIn int) (*Layer, error) 
 	layer := &Layer{}
 	layer.id = helpers.PseudoRandString(10)
 	layer.kind = layerKind[c.Kind]
-	layer.net = net
 	// INPUT layer has neither weights matrix nor activation funcs
 	if layer.kind != INPUT {
 		// Set activation function
@@ -95,6 +87,7 @@ func NewLayer(net *Network, c *config.LayerConfig, layerIn int) (*Layer, error) 
 		layer.meta = c.NeurFn.Meta()
 		layer.actFn = c.NeurFn.ActFn
 		layer.actGradFn = c.NeurFn.ActGradFn
+		layerOut := c.Size
 		// initialize weights to random values
 		var err error
 		layer.weights, err = matrix.MakeRandMx(layerOut, layerIn+1, 0.0, 1.0)
@@ -156,12 +149,12 @@ func (l *Layer) Deltas() *mat64.Dense {
 	return l.deltas
 }
 
-// Out calculates output of the network layer for the given input.
-// If the layer is an INPUT layer, it returns the supplied input argument.
-func (l *Layer) Out(inputMx mat64.Matrix) (mat64.Matrix, error) {
+// FwdOut calculates forward output of the network layer for the given input.
+// If the layer is an INPUT layer, it returns the matrix supplied as an argument.
+func (l *Layer) FwdOut(inputMx mat64.Matrix) (mat64.Matrix, error) {
 	// if input is nil, return error
 	if inputMx == nil {
-		return nil, fmt.Errorf("Can't calculate output for %v input\n", inputMx)
+		return nil, fmt.Errorf("Cant calculate output for: %v\n", inputMx)
 	}
 	// if it's INPUT layer, output is input
 	if l.kind == INPUT {

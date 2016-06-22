@@ -109,6 +109,40 @@ func TestNewNetwork(t *testing.T) {
 	assert.Error(err)
 }
 
+func TestAddLayer(t *testing.T) {
+	assert := assert.New(t)
+	// basic configuration settings
+	tmpPath := path.Join(os.TempDir(), fileName)
+	c, err := config.NewNetConfig(tmpPath)
+	assert.NotNil(c)
+	assert.NoError(err)
+	// create new network
+	n, err := NewNetwork(c)
+	assert.NotNil(n)
+	assert.NoError(err)
+	// create input layer
+	l, err := NewLayer(c.Arch.Input, 10)
+	assert.NotNil(l)
+	assert.NoError(err)
+	// add duplicate input layer
+	err = n.AddLayer(l)
+	assert.Error(err)
+	// create output layer
+	l, err = NewLayer(c.Arch.Output, 10)
+	assert.NotNil(l)
+	assert.NoError(err)
+	// add duplicate output layer
+	err = n.AddLayer(l)
+	assert.Error(err)
+	// add another hidden layer
+	l, err = NewLayer(c.Arch.Hidden[0], 10)
+	assert.NotNil(l)
+	assert.NoError(err)
+	// add duplicate output layer
+	err = n.AddLayer(l)
+	assert.NoError(err)
+}
+
 func TestID(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
