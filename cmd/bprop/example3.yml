@@ -1,0 +1,17 @@
+kind: feedfwd
+task: class
+layers:
+  input:
+    size: 400
+  hidden:
+    size: [25]
+    activation: tanh
+  output:
+    size: 10
+    activation: tanh
+training:
+  kind: backprop
+  params: "lambda=1.0"
+optimize:
+  method: bfgs
+  iterations: 173

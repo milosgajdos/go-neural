@@ -7,10 +7,11 @@ import (
 	"os"
 
 	"github.com/gonum/matrix/mat64"
-	"github.com/milosgajdos83/go-neural/learn/backprop"
 	"github.com/milosgajdos83/go-neural/neural"
+	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/dataset"
-	"github.com/milosgajdos83/go-neural/pkg/matrix"
+	"github.com/milosgajdos83/go-neural/pkg/helpers"
+	"github.com/milosgajdos83/go-neural/train/backprop"
 )
 
 var (
@@ -20,28 +21,27 @@ var (
 	labeled bool
 	// do we want to normalize data
 	scale bool
-	// how many classes are in the datasets
-	classes int
-	// number of iterations
-	iters int
-	// regularization parameter
-	lambda float64
+	// manifest contains neural net config
+	manifest string
 )
 
 func init() {
 	flag.StringVar(&data, "data", "", "Path to training data set")
 	flag.BoolVar(&labeled, "labeled", false, "Is the data set labeled")
 	flag.BoolVar(&scale, "scale", false, "Require data scaling")
-	flag.IntVar(&classes, "classes", 0, "How many classes are in the data set")
-	flag.IntVar(&iters, "iters", 50, "Number of iterations")
-	flag.Float64Var(&lambda, "lambda", 1.0, "Regularization parameter")
+	flag.StringVar(&manifest, "manifest", "", "Path to a neural net manifest file")
 }
 
 func parseCliFlags() error {
 	flag.Parse()
 	// path to training data is mandatory
 	if data == "" {
-		return errors.New("You must specify the path to training data set")
+		return errors.New("You must specify path to training data set")
+	}
+
+	// path to manifest is mandatory
+	if manifest == "" {
+		return errors.New("You must specify path to manifest file")
 	}
 	return nil
 }
@@ -50,6 +50,12 @@ func main() {
 	// parse cli parameters
 	if err := parseCliFlags(); err != nil {
 		fmt.Printf("Error parsing cli flags: %s\n", err)
+		os.Exit(1)
+	}
+	// Read in configuration file
+	config, err := config.NewNetConfig(manifest)
+	if err != nil {
+		fmt.Printf("Error reading manifest file: %s\n", err)
 		os.Exit(1)
 	}
 	// load new data set from provided file
@@ -64,40 +70,51 @@ func main() {
 	if scale {
 		features = dataset.Scale(features)
 	}
-	// extract labels
+	// extract data labels
 	labels := ds.Labels()
 	if labels == nil {
 		fmt.Println("Data set does not contain any labels")
 		os.Exit(1)
 	}
-	// number of classes must be a positive integer
-	if classes < 1 {
-		fmt.Printf("Insufficient number of classes: %d\n", classes)
-		os.Exit(1)
-	}
 	// Create new FEEDFWD network
-	_, colsIn := features.Dims()
-	hiddenLayers := []int{25}
-	// we will classify the output to number of specified classes
-	nf := &neural.NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
-	arch := &neural.NetworkArch{Input: colsIn, Hidden: hiddenLayers, Output: classes}
-	netConfig := &neural.Config{Kind: neural.FEEDFWD, Arch: arch, ActFunc: nf}
-	net, err := neural.NewNetwork(netConfig)
+	net, err := neural.NewNetwork(config)
 	if err != nil {
-		fmt.Printf("Error creating network: %s\n", err)
+		fmt.Printf("Error creating neural network: %s\n", err)
 		os.Exit(1)
 	}
-	c := &backprop.Config{Weights: nil, Lambda: lambda, Labels: classes, Iters: iters}
-	if err := backprop.Train(net, c, features.(*mat64.Dense), labels.(*mat64.Vector)); err != nil {
-		fmt.Printf("Error training network: %s\n", err)
+	params, err := helpers.ParseParams(config.Training.Params)
+	if err != nil {
+		fmt.Printf("Error parsing training params: %s\n", err)
+		os.Exit(1)
 	}
+	lambda, ok := params["lambda"]
+	if !ok {
+		fmt.Printf("Could not find lambda in training parameters")
+		os.Exit(1)
+	}
+
+	// neural network training
+	tc := config.Training
+	c := &backprop.Config{
+		Weights: nil,
+		Optim:   tc.Optimize.Method,
+		Lambda:  lambda,
+		Labels:  config.Arch.Output.Size,
+		Iters:   tc.Optimize.Iterations,
+	}
+	err = backprop.Train(net, c, features.(*mat64.Dense), labels.(*mat64.Vector))
+	if err != nil {
+		fmt.Printf("Error training network: %s\n", err)
+		os.Exit(1)
+	}
+	// check the success rate i.e. successful number of classifications
 	success, err := net.Validate(features.(*mat64.Dense), labels.(*mat64.Vector))
 	if err != nil {
 		fmt.Printf("Could not calculate success rate: %s\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("\nNeural net accuracy: %f\n", success)
-	// let's classify the first row
+	// Example of sample classification: in this case it's 1st data sample
 	sample := (features.(*mat64.Dense)).RowView(0).T()
 	classMx, err := net.Classify(sample)
 	if err != nil {

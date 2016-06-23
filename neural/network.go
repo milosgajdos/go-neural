@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/helpers"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 )
@@ -13,9 +14,14 @@ const (
 	FEEDFWD NetworkKind = iota + 1
 )
 
+// kindMap maps strings to NetworkKind
+var netKind = map[string]NetworkKind{
+	"feedfwd": FEEDFWD,
+}
+
 // supported neural network types
-var supported = map[NetworkKind]func(*Config) (*Network, error){
-	FEEDFWD: createFeedFwdNetwork,
+var supported = map[string]func(*config.NetConfig) (*Network, error){
+	"feedfwd": createFeedFwdNetwork,
 }
 
 // NetworkKind defines a type of neural network
@@ -31,26 +37,6 @@ func (n NetworkKind) String() string {
 	}
 }
 
-// NetworkArch represents Neural Network architecture
-type NetworkArch struct {
-	// Input layer size
-	Input int
-	// Hidden layers' sizes
-	Hidden []int
-	// Output layer size
-	Output int
-}
-
-// Config provides Neural Network configuration
-type Config struct {
-	// Kind is Neural Network type
-	Kind NetworkKind
-	// Arch specifies Neural Network architecture
-	Arch *NetworkArch
-	// ActFunc specifies Neural Network activation functions
-	ActFunc *NeuronFunc
-}
-
 // Network represents Neural Network
 type Network struct {
 	id     string
@@ -62,49 +48,121 @@ type Network struct {
 // It fails with error if either the unsupported network kind has been requested or
 // if any of the neural network layers failed to be created. This can be due to
 // incorrect network architecture i.e. mismatched neural layer dimensions.
-func NewNetwork(c *Config) (*Network, error) {
+func NewNetwork(c *config.NetConfig) (*Network, error) {
+	if c == nil {
+		return nil, fmt.Errorf("Invalid config supplied: %v\n", c)
+	}
+	// check if the requested network is supported
 	createNet, ok := supported[c.Kind]
 	if !ok {
-		return nil, fmt.Errorf("Unsupported Neural Network kind: %s\n", c.Kind)
+		return nil, fmt.Errorf("Unsupported neural network type: %s\n", c.Kind)
 	}
 	// return network
 	return createNet(c)
 }
 
 // createFeedFwdNetwork creates feedforward neural network or fails with error
-func createFeedFwdNetwork(c *Config) (*Network, error) {
+func createFeedFwdNetwork(c *config.NetConfig) (*Network, error) {
 	// you must supply network architecture
 	if c.Arch == nil {
 		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", c.Arch)
 	}
 	net := &Network{}
 	net.id = helpers.PseudoRandString(10)
-	net.kind = c.Kind
-	// Initialize INPUT layer: Input and Output layers are the same
-	inLayer, err := NewLayer(INPUT, net, nil, c.Arch.Input, c.Arch.Input)
+	net.kind = netKind[c.Kind]
+	// Create INPUT layer: feedfwd network INPUT layer has no activation function
+	layerInSize := c.Arch.Input.Size
+	inLayer, err := NewLayer(c.Arch.Input, c.Arch.Input.Size)
 	if err != nil {
 		return nil, err
 	}
-	net.layers = append(net.layers, inLayer)
-	// layer input size set to INPUT as that's the first layer in to first HIDDEN layer
-	layerInSize := c.Arch.Input
+	// add neural net layer
+	if err := net.AddLayer(inLayer); err != nil {
+		return nil, err
+	}
 	// create HIDDEN layers
-	for _, hiddenSize := range c.Arch.Hidden {
-		layer, err := NewLayer(HIDDEN, net, c.ActFunc, layerInSize, hiddenSize)
+	for _, layerConfig := range c.Arch.Hidden {
+		layer, err := NewLayer(layerConfig, layerInSize)
 		if err != nil {
 			return nil, err
 		}
-		net.layers = append(net.layers, layer)
+		// add neural net layer
+		if err := net.AddLayer(layer); err != nil {
+			return nil, err
+		}
 		// layerInSize is set to output of the previous layer
-		layerInSize = hiddenSize
+		layerInSize = layerConfig.Size
 	}
 	// Create OUTPUT layer
-	outLayer, err := NewLayer(OUTPUT, net, c.ActFunc, layerInSize, c.Arch.Output)
+	outLayer, err := NewLayer(c.Arch.Output, layerInSize)
 	if err != nil {
 		return nil, err
 	}
-	net.layers = append(net.layers, outLayer)
+	// add neural net layer
+	if err := net.AddLayer(outLayer); err != nil {
+		return nil, err
+	}
 	return net, nil
+}
+
+// AddLayer adds layer to neural network or fails with error
+// AddLayer places restrictions on adding new layers:
+// 1. INPUT layer  - there must only be one INPUT layer
+// 2. HIDDEN layer - new HIDDEN layer is appened after the last HIDDEN layer
+// 3. OUTPUT layer - there must only be one OUTPUT layer
+// AddLayer fails with error if either 1. or 3. are not satisfied
+func (n *Network) AddLayer(layer *Layer) error {
+	nrLayers := len(n.layers)
+	// if no layer exists yet, just append
+	if nrLayers == 0 {
+		n.layers = append(n.layers, layer)
+	}
+	// if one layer already exists it depends on which one we are adding
+	if nrLayers == 1 {
+		switch n.layers[0].Kind() {
+		case INPUT:
+			if layer.Kind() == INPUT {
+				return fmt.Errorf("Can't create multiple INPUT layers\n")
+			}
+			n.layers = append(n.layers, layer)
+		case OUTPUT:
+			if layer.Kind() == OUTPUT {
+				return fmt.Errorf("Can't create multiple OUTPUT layers\n")
+			}
+			n.layers = append(n.layers, layer)
+		default:
+			n.layers = append(n.layers, layer)
+		}
+	}
+	if nrLayers > 1 {
+		switch layer.Kind() {
+		case INPUT:
+			if n.layers[0].Kind() == INPUT {
+				return fmt.Errorf("Can't create multiple INPUT layers\n")
+			}
+			// Prepend - i.e. place INPUT at the first position
+			n.layers = append([]*Layer{layer}, n.layers...)
+		case OUTPUT:
+			if n.layers[nrLayers-1].Kind() == OUTPUT {
+				return fmt.Errorf("Can't create multiple OUTPUT layers\n")
+			}
+			// append at the end
+			n.layers = append(n.layers, layer)
+		case HIDDEN:
+			// find last hidden layer and append afterwards
+			var lastHidden int
+			for i, l := range n.layers {
+				if l.Kind() == HIDDEN {
+					lastHidden = i
+				}
+			}
+			// expand capacity
+			n.layers = append(n.layers, nil)
+			copy(n.layers[lastHidden+1:], n.layers[lastHidden:])
+			n.layers[lastHidden] = layer
+		}
+	}
+	return nil
 }
 
 // ID returns neural network id
@@ -148,9 +206,9 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 	layer := layers[from]
 	// we can't go backwards
 	if from == to {
-		return layer.Out(inMx)
+		return layer.FwdOut(inMx)
 	}
-	out, err := layer.Out(inMx)
+	out, err := layer.FwdOut(inMx)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +216,8 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 }
 
 // BackProp performs back propagation of neural network. It traverses neural network recursively
-// and updates deltas of each network layer based on the layer error minimizin the network's objective func.
-// It fails with error if either the supplied input and delta matrices are nil or f the specified
+// from layer specified via parameter and calculates error deltas for each network layer.
+// It fails with error if either the supplied input and delta matrices are nil or if the specified
 // from boundary goes beyond the first network layer that can have output errors calculated
 func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 	if inMx == nil {
@@ -176,62 +234,52 @@ func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 		return fmt.Errorf("Cant backpropagate beyond first layer: %d\n", len(layers))
 	}
 	// perform the actual back propagation till the first hidden layer
-	n.doBackProp(inMx, deltaMx, fromLayer, 1)
-	return nil
+	return n.doBackProp(inMx, deltaMx, fromLayer, 1)
 }
 
 // doBackProp performs the actual backpropagation
-func (n *Network) doBackProp(inMx, deltaMx mat64.Matrix, from, to int) error {
+func (n *Network) doBackProp(inMx, errMx mat64.Matrix, from, to int) error {
 	// get all the layers
 	layers := n.Layers()
 	// pick deltas layer
-	deltasLayer := layers[from]
-	bpDeltasMx := deltasLayer.Deltas()
-	// If we reach the 1st hidden layer we return
-	if from == to {
-		outMx, err := n.ForwardProp(inMx, from-1)
-		if err != nil {
-			return err
-		}
-		outMxBias := matrix.AddBias(outMx)
-		dMx := new(mat64.Dense)
-		dMx.Mul(deltaMx.T(), outMxBias)
-		// update deltas
-		bpDeltasMx.Add(bpDeltasMx, dMx)
-		return nil
-	}
-	// pick weights layer
-	weightsLayer := layers[from]
-	bpWeightsMx := weightsLayer.Weights()
-	// pick errLayer
-	weightsErrLayer := layers[from-1]
-	weightsErrMx := weightsErrLayer.Weights()
-	// forward propagate to from layer
+	layer := layers[from]
+	deltasMx := layer.Deltas()
+	weightsMx := layer.Weights()
+	//forward propagate to previous layer
 	outMx, err := n.ForwardProp(inMx, from-1)
 	if err != nil {
 		return err
 	}
-	// add Bias unit
-	biasOutMx := matrix.AddBias(outMx)
+	outMxBias := matrix.AddBias(outMx)
+	// compute deltas update
 	dMx := new(mat64.Dense)
-	dMx.Mul(deltaMx.T(), biasOutMx)
-	bpDeltasMx.Add(bpDeltasMx, dMx)
-	// errTmp holds layer error not accounting for bias
+	dMx.Mul(errMx.T(), outMxBias)
+	// update deltas
+	deltasMx.Add(deltasMx, dMx)
+	// If we reach the 1st hidden layer we return
+	if from == to {
+		return nil
+	}
+	// errTmpMx holds layer error not accounting for bias
 	errTmpMx := new(mat64.Dense)
-	errTmpMx.Mul(bpWeightsMx.T(), deltaMx.T())
+	errTmpMx.Mul(weightsMx.T(), errMx.T())
 	r, c := errTmpMx.Dims()
 	// avoid bias
-	layeErr := errTmpMx.View(1, 0, r-1, c).(*mat64.Dense)
+	layerErr := errTmpMx.View(1, 0, r-1, c).(*mat64.Dense)
 	// pre-activation unit
 	actInMx, err := n.ForwardProp(inMx, from-2)
 	if err != nil {
 		return err
 	}
 	biasActInMx := matrix.AddBias(actInMx)
+	// pick errLayer
+	weightsErrLayer := layers[from-1]
+	weightsErrMx := weightsErrLayer.Weights()
+	// compute gradient matrix
 	gradMx := new(mat64.Dense)
 	gradMx.Mul(biasActInMx, weightsErrMx.T())
-	gradMx.Apply(weightsErrLayer.NeuronFunc().BackFn, gradMx)
-	gradMx.MulElem(layeErr.T(), gradMx)
+	gradMx.Apply(weightsErrLayer.ActGradFn(), gradMx)
+	gradMx.MulElem(layerErr.T(), gradMx)
 	return n.doBackProp(inMx, gradMx, from-1, to)
 }
 

@@ -18,3 +18,27 @@ func TestPseudoRandString(t *testing.T) {
 		prev = new
 	}
 }
+
+func TestParseParams(t *testing.T) {
+	assert := assert.New(t)
+	testCases := []struct {
+		params  string
+		correct bool
+	}{
+		{"", false},
+		{"foo=bar=baz", false},
+		{"foo=bar", false},
+		{"foo=2.3", true},
+	}
+
+	for _, testCase := range testCases {
+		m, err := ParseParams(testCase.params)
+		if testCase.correct {
+			assert.NotNil(m)
+			assert.NoError(err)
+		} else {
+			assert.Nil(m)
+			assert.Error(err)
+		}
+	}
+}

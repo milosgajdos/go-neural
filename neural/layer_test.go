@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 	"github.com/stretchr/testify/assert"
 )
@@ -28,40 +29,35 @@ func TestLayerKind(t *testing.T) {
 func TestNewLayer(t *testing.T) {
 	assert := assert.New(t)
 
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
+	c := &config.LayerConfig{
+		Kind: "input",
+		Size: 10,
+		NeurFn: &config.NeuronConfig{
+			ActFn:     matrix.SigmoidMx,
+			ActGradFn: matrix.SigmoidGradMx,
+		},
 	}
-	// init naiive network
-	net := new(Network)
-	net.id = "testid"
-
 	// invalid layer parameters passed in
-	tstLayer, err := NewLayer(INPUT, net, nf, -10, 10)
+	tstLayer, err := NewLayer(c, -10)
 	assert.Nil(tstLayer)
 	assert.Error(err)
 	// invalid layer parameters passed in
-	tstLayer, err = NewLayer(INPUT, net, nf, 10, -10)
+	c.Size = -10
+	tstLayer, err = NewLayer(c, 10)
 	assert.Nil(tstLayer)
 	assert.Error(err)
-	// nil network
-	tstLayer, err = NewLayer(INPUT, nil, nf, 10, 10)
-	assert.Nil(tstLayer)
-	assert.Error(err)
-	// no network id
-	net.id = ""
-	tstLayer, err = NewLayer(INPUT, net, nf, 10, 10)
-	assert.Nil(tstLayer)
-	assert.Error(err)
+	c.Size = 10
 	// UNKNOWN layer
-	tstLayer, err = NewLayer(LayerKind(1000), net, nf, 10, 10)
+	c.Kind = "foobar"
+	tstLayer, err = NewLayer(c, 10)
 	assert.Nil(tstLayer)
 	assert.Error(err)
+	c.Kind = "input"
 	// correct cases
-	net.id = "testid"
-	lKinds := []LayerKind{INPUT, HIDDEN, OUTPUT}
-	for _, l := range lKinds {
-		tstLayer, err := NewLayer(l, net, nf, 10, 10)
+	lKinds := []string{"input", "hidden", "output"}
+	for _, lKind := range lKinds {
+		c.Kind = lKind
+		tstLayer, err := NewLayer(c, 10)
 		assert.NotNil(tstLayer)
 		assert.NoError(err)
 	}
@@ -70,26 +66,28 @@ func TestNewLayer(t *testing.T) {
 func TestIDAndKind(t *testing.T) {
 	assert := assert.New(t)
 
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
+	// layer config
+	c := &config.LayerConfig{
+		Kind: "input",
+		Size: 10,
+		NeurFn: &config.NeuronConfig{
+			ActFn:     matrix.SigmoidMx,
+			ActGradFn: matrix.SigmoidGradMx,
+		},
 	}
-	//init naiive network
-	net := new(Network)
-	net.id = "testid"
-
 	// create test network layer
 	lID := ""
-	lKinds := []LayerKind{INPUT, HIDDEN, OUTPUT}
-	for _, l := range lKinds {
-		tstLayer, err := NewLayer(l, net, nf, 10, 10)
+	lKinds := []string{"input", "hidden", "output"}
+	for _, lKind := range lKinds {
+		c.Kind = lKind
+		tstLayer, err := NewLayer(c, 10)
 		assert.NotNil(tstLayer)
 		assert.NoError(err)
 		// id can't be empty
 		assert.True(tstLayer.ID() != "")
 		// layers can't have identical Ids
 		assert.True(tstLayer.ID() != lID)
-		assert.Equal(tstLayer.Kind(), l)
+		assert.Equal(tstLayer.Kind(), layerKind[lKind])
 		lID = tstLayer.ID()
 	}
 }
@@ -97,16 +95,16 @@ func TestIDAndKind(t *testing.T) {
 func TestSetWeights(t *testing.T) {
 	assert := assert.New(t)
 
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
+	c := &config.LayerConfig{
+		Kind: "input",
+		Size: 20,
+		NeurFn: &config.NeuronConfig{
+			ActFn:     matrix.SigmoidMx,
+			ActGradFn: matrix.SigmoidGradMx,
+		},
 	}
-	//init naiive network
-	net := new(Network)
-	net.id = "testid"
-
 	// INPUT layer does not have any weights
-	tstLayer, err := NewLayer(INPUT, net, nf, 10, 20)
+	tstLayer, err := NewLayer(c, 10)
 	assert.NotNil(tstLayer)
 	assert.NoError(err)
 	weights := mat64.NewDense(100, 200, nil)
@@ -118,14 +116,16 @@ func TestSetWeights(t *testing.T) {
 	assert.Nil(inD)
 
 	// HIDDEN layer
-	tstLayer, err = NewLayer(HIDDEN, net, nf, 10, 20)
+	c.Kind = "hidden"
+	tstLayer, err = NewLayer(c, 10)
 	assert.NotNil(tstLayer)
 	assert.NoError(err)
+	// can't set layers to nil
 	err = tstLayer.SetWeights(nil)
 	assert.Error(err)
 
 	//OUTPUT layer wrong dimensions
-	tstLayer, err = NewLayer(HIDDEN, net, nf, 10, 20)
+	tstLayer, err = NewLayer(c, 10)
 	assert.NotNil(tstLayer)
 	assert.NoError(err)
 	wRows, wCols := 20, 1000
@@ -134,7 +134,7 @@ func TestSetWeights(t *testing.T) {
 	assert.Error(err)
 
 	// OUTPUT layer correct dimensions
-	tstLayer, err = NewLayer(HIDDEN, net, nf, 10, 20)
+	tstLayer, err = NewLayer(c, 10)
 	assert.NotNil(tstLayer)
 	assert.NoError(err)
 	wRows, wCols = 20, 11
@@ -150,19 +150,21 @@ func TestSetWeights(t *testing.T) {
 	assert.Equal(tdCols, wCols)
 }
 
-func TestOut(t *testing.T) {
+func TestFwdOut(t *testing.T) {
 	assert := assert.New(t)
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
+
+	c := &config.LayerConfig{
+		Kind: "input",
+		Size: 10,
+		NeurFn: &config.NeuronConfig{
+			ActFn:     matrix.SigmoidMx,
+			ActGradFn: matrix.SigmoidGradMx,
+		},
 	}
-	// dummy network for testing
-	net := new(Network)
-	net.id = "testid"
 	// Layer parameters
-	layerIn := 2
-	layerOut := 2
-	inputLayer, err := NewLayer(INPUT, net, nf, layerIn, layerOut)
+	layerIn, layerOut := 2, 2
+	c.Size = layerOut
+	inputLayer, err := NewLayer(c, layerIn)
 	assert.NotNil(inputLayer)
 	assert.NoError(err)
 
@@ -172,23 +174,24 @@ func TestOut(t *testing.T) {
 	assert.NotNil(corrInMx)
 
 	// nil input yields nil output
-	out, err := inputLayer.Out(nil)
+	out, err := inputLayer.FwdOut(nil)
 	assert.Nil(out)
 	assert.Error(err)
 	// INPUT layer proxies the input to output
-	out, err = inputLayer.Out(corrInMx)
+	out, err = inputLayer.FwdOut(corrInMx)
 	assert.NotNil(out)
 	assert.NoError(err)
 	assert.True(mat64.Equal(corrInMx, out))
 
 	// HIDDEN layer test
-	hiddenLayer, err := NewLayer(HIDDEN, net, nf, 2, 2)
+	c.Kind = "hidden"
+	hiddenLayer, err := NewLayer(c, layerIn)
 	assert.NotNil(hiddenLayer)
 	assert.NoError(err)
 	// mismatched dimension
 	mismData := []float64{3.0, 4.0, 1.0}
 	mismInMx := mat64.NewDense(1, 3, mismData)
-	out, err = hiddenLayer.Out(mismInMx)
+	out, err = hiddenLayer.FwdOut(mismInMx)
 	assert.Nil(out)
 	assert.Error(err)
 	// correct data dimension must yield the following result
@@ -200,71 +203,8 @@ func TestOut(t *testing.T) {
 	err = hiddenLayer.SetWeights(weights)
 	assert.NoError(err)
 	// compute output
-	out, err = hiddenLayer.Out(corrInMx)
+	out, err = hiddenLayer.FwdOut(corrInMx)
 	assert.NotNil(out)
 	assert.NoError(err)
 	assert.True(mat64.EqualApprox(out, expOut, 0.001))
-}
-
-func TestNeuronFunc(t *testing.T) {
-	assert := assert.New(t)
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
-	}
-	// create test network and test neural layer
-	net := new(Network)
-	net.id = "testid"
-
-	// INPUT layer has no NeuronFuncs
-	inputLayer, err := NewLayer(INPUT, net, nf, 10, 20)
-	assert.NotNil(inputLayer)
-	assert.NoError(err)
-	fn := inputLayer.NeuronFunc()
-	assert.Nil(fn)
-
-	// OUTPUT and HIDDEN layers must have NeuronFuncs
-	lKinds := []LayerKind{OUTPUT, HIDDEN}
-	for _, lkind := range lKinds {
-		tstLayer, err := NewLayer(lkind, net, nf, 10, 20)
-		assert.NotNil(tstLayer)
-		assert.NoError(err)
-		nf := tstLayer.NeuronFunc()
-		assert.NotNil(nf)
-	}
-}
-
-func TestSetNeuronFunc(t *testing.T) {
-	assert := assert.New(t)
-	nf := &NeuronFunc{
-		ForwFn: matrix.SigmoidMx,
-		BackFn: matrix.SigmoidGradMx,
-	}
-	// create test network and test neural layer
-	net := new(Network)
-	net.id = "testid"
-
-	// can't set nil Neuron func
-	tstLayer, err := NewLayer(HIDDEN, net, nf, 10, 20)
-	assert.NotNil(tstLayer)
-	assert.NoError(err)
-	err = tstLayer.SetNeuronFunc(nil)
-	assert.Error(err)
-
-	// can't set neuron func to INPUT layer
-	inputLayer, err := NewLayer(INPUT, net, nf, 10, 20)
-	assert.NotNil(inputLayer)
-	assert.NoError(err)
-	err = inputLayer.SetNeuronFunc(new(NeuronFunc))
-	assert.Error(err)
-
-	// OUTPUT and HIDDEN layers must have NeuronFuncs
-	lKinds := []LayerKind{OUTPUT, HIDDEN}
-	for _, lkind := range lKinds {
-		tstLayer, err := NewLayer(lkind, net, nf, 10, 20)
-		assert.NotNil(tstLayer)
-		assert.NoError(err)
-		err = tstLayer.SetNeuronFunc(new(NeuronFunc))
-		assert.NoError(err)
-	}
 }
