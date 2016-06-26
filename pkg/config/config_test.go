@@ -157,6 +157,18 @@ func TestParseTraining(t *testing.T) {
 	assert.Nil(c)
 	assert.Error(err)
 	m.Training.Kind = origTrAlg
+	// incorrect parameter format
+	origParam := m.Training.Params
+	m.Training.Params = "one&two=wrong"
+	c, err = Parse(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Training.Params = origParam
+	// correct parameters
+	c, err = Parse(&m)
+	assert.NotNil(c)
+	assert.NoError(err)
+	assert.Equal(c.Training.Params["lambda"], 1.0)
 }
 
 func TestParseOptimize(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/milosgajdos83/go-neural/pkg/helpers"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
 	"gopkg.in/yaml.v1"
 )
@@ -133,8 +134,8 @@ type OptimConfig struct {
 type TrainConfig struct {
 	// Kind defines a kind of neural net training
 	Kind string
-	// Params specifies training parameters
-	Params string
+	// Params stores arbitrary training parameters
+	Params map[string]float64
 	// Optimize specifies training optimization parameters
 	Optimize *OptimConfig
 }
@@ -273,7 +274,12 @@ func parseTraining(m *Manifest, c *NetConfig) error {
 		return fmt.Errorf("Unsupported training algorithm for %s network: %s\n",
 			m.Kind, m.Training.Kind)
 	}
-	c.Training.Params = m.Training.Params
+
+	trainParams, err := helpers.ParseParams(m.Training.Params)
+	if err != nil {
+		return err
+	}
+	c.Training.Params = trainParams
 	return nil
 }
 

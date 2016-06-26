@@ -10,7 +10,6 @@ import (
 	"github.com/milosgajdos83/go-neural/neural"
 	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/dataset"
-	"github.com/milosgajdos83/go-neural/pkg/helpers"
 	"github.com/milosgajdos83/go-neural/train/backprop"
 )
 
@@ -82,12 +81,7 @@ func main() {
 		fmt.Printf("Error creating neural network: %s\n", err)
 		os.Exit(1)
 	}
-	params, err := helpers.ParseParams(config.Training.Params)
-	if err != nil {
-		fmt.Printf("Error parsing training params: %s\n", err)
-		os.Exit(1)
-	}
-	lambda, ok := params["lambda"]
+	lambda, ok := config.Training.Params["lambda"]
 	if !ok {
 		fmt.Printf("Could not find lambda in training parameters")
 		os.Exit(1)
