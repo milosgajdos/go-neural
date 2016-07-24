@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gopkg.in/yaml.v1"
+	yaml "gopkg.in/yaml.v1"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -20,7 +20,7 @@ var (
 func setup() {
 	content := []byte(`kind: feedfwd
 task: class
-layers:
+network:
   input:
     size: 400
   hidden:
@@ -31,10 +31,12 @@ layers:
     activation: softmax
 training:
   kind: backprop
-  params: "lambda=1.0"
-optimize:
-  method: bfgs
-  iterations: 69`)
+  cost: xentropy
+  params:
+    lambda: 1.0
+  optimize:
+    method: bfgs
+    iterations: 69`)
 
 	tmpPath := filepath.Join(os.TempDir(), fileName)
 	if err := ioutil.WriteFile(tmpPath, content, 0666); err != nil {
@@ -57,27 +59,43 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
-func TestNewNetConfig(t *testing.T) {
+func TestNewConfig(t *testing.T) {
 	assert := assert.New(t)
 
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := NewNetConfig(tmpPath)
+	c, err := New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
+	// test if the parsed parameters are correct
+	assert.Equal(c.Network.Kind, "feedfwd")
+	assert.Equal(c.Network.Arch.Input.Kind, "input")
+	assert.Equal(c.Network.Arch.Input.Size, 400)
+	assert.Equal(c.Network.Arch.Input.NeurFn, (*NeuronConfig)(nil))
+	assert.Equal(c.Network.Arch.Hidden[0].Kind, "hidden")
+	assert.Equal(c.Network.Arch.Hidden[0].Size, 25)
+	assert.Equal(c.Network.Arch.Hidden[0].NeurFn.Activation, "sigmoid")
+	assert.Equal(c.Network.Arch.Output.Kind, "output")
+	assert.Equal(c.Network.Arch.Output.Size, 10)
+	assert.Equal(c.Network.Arch.Output.NeurFn.Activation, "softmax")
+	assert.Equal(c.Training.Kind, "backprop")
+	assert.Equal(c.Training.Cost, "xentropy")
+	assert.Equal(c.Training.Lambda, 1.0)
+	assert.Equal(c.Training.Optimize.Method, "bfgs")
+	assert.Equal(c.Training.Optimize.Iterations, 69)
 	// nonexistent file
-	c, err = NewNetConfig(filepath.Join(os.TempDir(), "random"))
+	c, err = New(filepath.Join(os.TempDir(), "random"))
 	assert.Nil(c)
 	assert.Error(err)
-	// incorrect file
+	// empty file
 	tmpfile, err := ioutil.TempFile("", "example.yml")
 	defer os.Remove(tmpfile.Name())
 	assert.NoError(err)
-	c, err = NewNetConfig(tmpfile.Name())
+	c, err = New(tmpfile.Name())
 	assert.Nil(c)
 	assert.Error(err)
 }
 
-func TestParseLayers(t *testing.T) {
+func TestParseManifest(t *testing.T) {
 	assert := assert.New(t)
 
 	var m Manifest
@@ -88,50 +106,26 @@ func TestParseLayers(t *testing.T) {
 	mData, err := ioutil.ReadAll(f)
 	assert.NoError(err)
 	err = yaml.Unmarshal(mData, &m)
+	assert.NoError(err)
+	// correct config
+	c, err := New(tmpPath)
+	assert.NotNil(c)
 	assert.NoError(err)
 	// empty net kind name
 	origKind := m.Kind
 	m.Kind = ""
-	c, err := Parse(&m)
+	c, err = ParseManifest(&m)
 	assert.Nil(c)
 	assert.Error(err)
+	// unsupported net kind
 	m.Kind = "unsupported"
-	c, err = Parse(&m)
+	c, err = ParseManifest(&m)
 	assert.Nil(c)
 	assert.Error(err)
 	m.Kind = origKind
-	// incorrect input layer size
-	origInSize := m.Layers.Input.Size
-	m.Layers.Input.Size = 0
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Kind = origKind
-	m.Layers.Input.Size = origInSize
-	// unknown activation function
-	origActFn := m.Layers.Hidden.Activation
-	m.Layers.Hidden.Activation = "foobar"
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Layers.Hidden.Activation = origActFn
-	// incorrect output size
-	origOutSize := m.Layers.Output.Size
-	m.Layers.Output.Size = 0
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Layers.Output.Size = origOutSize
-	// output activation function
-	origActFn = m.Layers.Output.Activation
-	m.Layers.Output.Activation = "foobar"
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Layers.Output.Activation = origActFn
 }
 
-func TestParseTraining(t *testing.T) {
+func TestParseNetConfig(t *testing.T) {
 	assert := assert.New(t)
 
 	var m Manifest
@@ -143,32 +137,31 @@ func TestParseTraining(t *testing.T) {
 	assert.NoError(err)
 	err = yaml.Unmarshal(mData, &m)
 	assert.NoError(err)
-	// unsupported network has no training
-	origNetKind := m.Kind
-	m.Kind = "SOM"
-	c, err := Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Kind = origNetKind
-	// unsupported training algorithm
-	origTrAlg := m.Training.Kind
-	m.Training.Kind = "foobar"
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Training.Kind = origTrAlg
-	// incorrect parameter format
-	origParam := m.Training.Params
-	m.Training.Params = "one&two=wrong"
-	c, err = Parse(&m)
-	assert.Nil(c)
-	assert.Error(err)
-	m.Training.Params = origParam
-	// correct parameters
-	c, err = Parse(&m)
+	// correct config
+	c, err := New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
-	assert.Equal(c.Training.Params["lambda"], 1.0)
+	// incorrect input layer size
+	origInSize := m.Network.Input.Size
+	m.Network.Input.Size = 0
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Network.Input.Size = origInSize
+	// incorrect hidden layer size
+	origHidSize := m.Network.Hidden.Size[0]
+	m.Network.Hidden.Size[0] = 0
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Network.Hidden.Size[0] = origHidSize
+	// incorrect output size
+	origOutSize := m.Network.Output.Size
+	m.Network.Output.Size = 0
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Network.Output.Size = origOutSize
 }
 
 func TestParseOptimize(t *testing.T) {
@@ -183,11 +176,75 @@ func TestParseOptimize(t *testing.T) {
 	assert.NoError(err)
 	err = yaml.Unmarshal(mData, &m)
 	assert.NoError(err)
-	// unsupported optimization method
-	origOptimMethod := m.Optimize.Method
-	m.Optimize.Method = "foobar"
-	c, err := Parse(&m)
+	// correct config
+	c, err := New(tmpPath)
+	assert.NotNil(c)
+	assert.NoError(err)
+	// empty optimize method
+	origOptimMethod := m.Training.Optimize.Method
+	m.Training.Optimize.Method = ""
+	c, err = ParseManifest(&m)
 	assert.Nil(c)
 	assert.Error(err)
-	m.Optimize.Method = origOptimMethod
+	// unsupported optimization method
+	m.Training.Optimize.Method = "foobar"
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Training.Optimize.Method = origOptimMethod
+}
+
+func TestParseTraining(t *testing.T) {
+	assert := assert.New(t)
+
+	var m Manifest
+	tmpPath := path.Join(os.TempDir(), fileName)
+	f, err := os.Open(tmpPath)
+	defer f.Close()
+	assert.NoError(err)
+	mData, err := ioutil.ReadAll(f)
+	assert.NoError(err)
+	err = yaml.Unmarshal(mData, &m)
+	assert.NoError(err)
+	// correct config
+	c, err := New(tmpPath)
+	assert.NotNil(c)
+	assert.NoError(err)
+	// empty training kind
+	origTrAlg := m.Training.Kind
+	m.Training.Kind = ""
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Training.Kind = origTrAlg
+	// unsupported training algorithm
+	m.Training.Kind = "foobar"
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Training.Kind = origTrAlg
+	// empty cost function
+	origCost := m.Training.Cost
+	m.Training.Cost = ""
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	// unsupported cost function
+	m.Training.Cost = "foocost"
+	c, err = ParseManifest(&m)
+	assert.NotNil(c)
+	assert.NoError(err)
+	assert.Equal(c.Training.Cost, "foocost")
+	m.Training.Cost = origCost
+	// incorrect lambda
+	origLambda := m.Training.Params.Lambda
+	m.Training.Params.Lambda = -1
+	c, err = ParseManifest(&m)
+	assert.Nil(c)
+	assert.Error(err)
+	m.Training.Params.Lambda = origLambda
+	// correct parameters
+	c, err = ParseManifest(&m)
+	assert.NotNil(c)
+	assert.NoError(err)
 }

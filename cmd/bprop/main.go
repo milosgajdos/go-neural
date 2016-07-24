@@ -10,7 +10,6 @@ import (
 	"github.com/milosgajdos83/go-neural/neural"
 	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/dataset"
-	"github.com/milosgajdos83/go-neural/train/backprop"
 )
 
 var (
@@ -52,7 +51,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Read in configuration file
-	config, err := config.NewNetConfig(manifest)
+	config, err := config.New(manifest)
 	if err != nil {
 		fmt.Printf("Error reading manifest file: %s\n", err)
 		os.Exit(1)
@@ -76,27 +75,13 @@ func main() {
 		os.Exit(1)
 	}
 	// Create new FEEDFWD network
-	net, err := neural.NewNetwork(config)
+	net, err := neural.NewNetwork(config.Network)
 	if err != nil {
 		fmt.Printf("Error creating neural network: %s\n", err)
 		os.Exit(1)
 	}
-	lambda, ok := config.Training.Params["lambda"]
-	if !ok {
-		fmt.Printf("Could not find lambda in training parameters")
-		os.Exit(1)
-	}
-
-	// neural network training
-	tc := config.Training
-	c := &backprop.Config{
-		Weights: nil,
-		Optim:   tc.Optimize.Method,
-		Lambda:  lambda,
-		Labels:  config.Arch.Output.Size,
-		Iters:   tc.Optimize.Iterations,
-	}
-	err = backprop.Train(net, c, features.(*mat64.Dense), labels.(*mat64.Vector))
+	// Run neural network training
+	err = net.Train(config.Training, features.(*mat64.Dense), labels.(*mat64.Vector))
 	if err != nil {
 		fmt.Printf("Error training network: %s\n", err)
 		os.Exit(1)

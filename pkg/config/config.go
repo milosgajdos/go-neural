@@ -1,24 +1,21 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 
-	"github.com/milosgajdos83/go-neural/pkg/helpers"
-	"github.com/milosgajdos83/go-neural/pkg/matrix"
 	"gopkg.in/yaml.v1"
 )
 
 // Manifest is a data structure used to decode neural network configuration manifest
 type Manifest struct {
-	// Kind holds neural network Kind
+	// Kind holds neural network Kind: feedfwd
 	Kind string `yaml:"kind"`
-	// Task is neural network task
+	// Task is neural network task: class, [cluster, predict]
 	Task string `yaml:"task"`
-	// Layers hold neural network layer config
-	Layers struct {
+	// Network provides neural network layer config and topology
+	Network struct {
 		// Input layer configuration
 		Input struct {
 			// Size represents number of input neurons
@@ -26,7 +23,7 @@ type Manifest struct {
 		} `yaml:"input"`
 		// Hidden layers configuration
 		Hidden struct {
-			// Size contains sizes of hidden layers
+			// Size contains sizes of all hidden layers
 			Size []int `yaml:"size"`
 			// Activation is neuron activation function
 			Activation string `yaml:"activation"`
@@ -38,271 +35,264 @@ type Manifest struct {
 			// Activation is neuron activation function
 			Activation string `yaml:"activation"`
 		} `yaml:"output"`
-	} `yaml:"layers"`
+	} `yaml:"network"`
 	// Training holds neural network training configuration
 	Training struct {
 		// Kind holds kind of neural network training
 		Kind string `yaml:"kind"`
+		// Cost allows to specify cost function: xentropy, loglike
+		Cost string `yaml:"cost"`
 		// Params contains parameters of neural training
-		Params string `yaml:"params,omitempty"`
+		Params struct {
+			// Lambda is regualirzation parameter
+			Lambda float64 `yaml:"lambda"`
+		} `yaml:"params"`
+		// Optimize contains configuration for training optimization
+		Optimize struct {
+			// Method represents type of optimization
+			Method string `yaml:"method"`
+			// Iterations is a number of major optimization iterations
+			Iterations int `yaml:"iterations,omitempty"`
+		} `yaml:"optimize,omitempty"`
 	} `yaml:"training"`
-	// Optimize contains configuration for training optimization
-	Optimize struct {
-		// Method represents type of optimization
-		Method string `yaml:"method"`
-		// Iterations is a number of major optimization iterations
-		Iterations int `yaml:"iterations,omitempty"`
-	} `yaml:"optimize,omitempty"`
 }
 
-// supported allows to query which neural network types are supported for a particular network
-// It also allows to query which optimization methods ara available for training particular network
-var supported = map[string]map[string][]string{
+// network maps supported training and optimization parameters to a particular neural network
+var network = map[string]map[string][]string{
 	"feedfwd": map[string][]string{
 		"training": []string{"backprop"},
 		"optim":    []string{"bfgs"},
 	},
 }
 
-// neurFunc maps activation function names to the activation implementations and to their gradients
-var neurFunc = map[string]map[string]ActivationFn{
-	"sigmoid": map[string]ActivationFn{
-		"act":  matrix.SigmoidMx,
-		"grad": matrix.SigmoidGradMx,
-	},
-	"softmax": map[string]ActivationFn{
-		"act":  matrix.ExpMx,
-		"grad": matrix.SigmoidGradMx,
-	},
-	"tanh": map[string]ActivationFn{
-		"act":  matrix.TanhMx,
-		"grad": matrix.TanhGradMx,
-	},
-	"relu": map[string]ActivationFn{
-		"act":  matrix.ReluMx,
-		"grad": matrix.ReluGradMx,
-	},
-}
-
-// ActivationFn defines a neuron activation function
-type ActivationFn func(int, int, float64) float64
-
-// NeuronConfig holds neuron configuration
+// NeuronConfig allows to specify neuron configuration
 type NeuronConfig struct {
-	meta string
-	// ActFn is neuron activation function
-	ActFn ActivationFn
-	// ActGradFn is gradient of activation function
-	// used in backpropagation algorithm
-	ActGradFn ActivationFn
+	// Activation is a neuron activation function
+	Activation string
 }
 
-// Meta returns meta information about Neural Functions
-func (n NeuronConfig) Meta() string {
-	return n.meta
-}
-
-// LayerConfig contains layer configuration
+// LayerConfig allows to specify neural network layer configuration
 type LayerConfig struct {
-	// Kind is neural net layer kind
+	// Kind is neural network layer kind: input, output, hidden
 	Kind string
-	// Size contains sizes of hidden layers
+	// Size represents a number of neurons in the network layer
 	Size int
-	// NeurFn holds neuron activation functions
+	// NeurFn holds neuron configuration
 	NeurFn *NeuronConfig
 }
 
-// NetworkArch represents Neural Network architecture
+// NetArch specifies neural network architecture
 type NetArch struct {
-	// Input lauer configuration
+	// Input layer configuration
 	Input *LayerConfig
-	// Hidden layer configuration
+	// Hidden layers configuration. It is a slice as there can be multiple hidden layers
 	Hidden []*LayerConfig
 	// Output layer configuration
 	Output *LayerConfig
 }
 
-// OptimConfig holds optimization configuration
-type OptimConfig struct {
-	// Method specifies optimization method
-	Method string
-	// Iterations specifies number of iterations
-	Iterations int
-}
-
-// TrainConfig specifies neural net training configuration
-type TrainConfig struct {
-	// Kind defines a kind of neural net training
-	Kind string
-	// Params stores arbitrary training parameters
-	Params map[string]float64
-	// Optimize specifies training optimization parameters
-	Optimize *OptimConfig
-}
-
-// NetConfig specifies neural network configuration
+// NetConfig allows to specify Neural Network parameters
 type NetConfig struct {
 	// Kind is Neural Network type
 	Kind string
-	// Arch holds neural network architecture
+	// Arch specifies network architecture
 	Arch *NetArch
+}
+
+// OptimConfig allows to specify advanced optimization configuration
+type OptimConfig struct {
+	// Method is an advanced optimization method
+	// Currently only bfgs algorithm is supported
+	Method string
+	// Iterations specifies the number of optimization iterations
+	Iterations int
+}
+
+// TrainConfig allows to specify neural network training configuration
+type TrainConfig struct {
+	// Kind is a neural network training type: backprop
+	Kind string
+	// Cost is a neural network cost function
+	Cost string
+	// Lambda is regularizer parameter
+	Lambda float64
+	// Optimize holds training optimization parameters
+	Optimize *OptimConfig
+}
+
+// Config allows to specify neural network architecture and training configuration
+type Config struct {
+	// Network holds neural network configuration
+	Network *NetConfig
 	// Training holds neural network training configuration
 	Training *TrainConfig
 }
 
-// NewNetConfig returns neural network configuration or fails with error
-func NewNetConfig(manPath string) (*NetConfig, error) {
+// New returns neural network config struct based on the supplied manifest file.
+// It accepts path to a config manifest file as a parameter. It returns error if the supplied
+// manifest file can't be open or if it can not be parsed into a valid configration object.
+func New(manPath string) (*Config, error) {
 	var m Manifest
 	// Open manifest file
 	f, err := os.Open(manPath)
 	if err != nil {
-		return nil, fmt.Errorf("Could not open manifest file: %s\n", err)
+		return nil, err
 	}
 	defer f.Close()
 	// read the whole manifest file in one shot
-	mData, err := ioutil.ReadAll(f)
+	manData, err := ioutil.ReadAll(f)
 	if err != nil {
-		return nil, fmt.Errorf("Could not read manifest file: %s\n", err)
+		return nil, err
 	}
-	// unmarshal the manifest file
-	if err := yaml.Unmarshal(mData, &m); err != nil {
-		return nil, fmt.Errorf("Could not decode manifest file: %s\n", err)
+	// unmarshal the manifest data into Manifest struct
+	if err := yaml.Unmarshal(manData, &m); err != nil {
+		return nil, err
 	}
-	return Parse(&m)
+	return ParseManifest(&m)
 }
 
-// Parse parses the manifest into NetConfig or fails with error
-func Parse(m *Manifest) (*NetConfig, error) {
-	// initialize dummy config
-	c := &NetConfig{}
-	c.Arch = &NetArch{}
-	c.Training = &TrainConfig{}
-
-	// check if the network kind is supported
+// ParseManifest parses the manifest supplied as a parameter into Config or fails with error
+func ParseManifest(m *Manifest) (*Config, error) {
+	// check if the network kind is not empty
 	if m.Kind == "" {
-		return nil, errors.New("Network kind parameter cant be empty!")
+		return nil, fmt.Errorf("Network kind can not be empty!\n")
 	}
-	if _, ok := supported[m.Kind]; !ok {
-		return nil, fmt.Errorf("Unsupported Neural Network type: %s\n", m.Kind)
+	// check if the requested network kind is supported
+	if _, ok := network[m.Kind]; !ok {
+		return nil, fmt.Errorf("Unsupported network kind: %s\n", m.Kind)
 	}
-	c.Kind = m.Kind
-	// parse neural network layers params
-	if err := parseLayers(m, c); err != nil {
+	// parse neural network layer configuration parameters
+	netConfig, err := parseNetConfig(m)
+	if err != nil {
 		return nil, err
 	}
-	// parse trainig parameters
-	if err := parseTraining(m, c); err != nil {
-		return nil, err
-	}
-	// parse optimization params
-	if err := parseOptimize(m, c); err != nil {
+	// parse trainig configuration parameters
+	trainConfig, err := parseTrainConfig(m)
+	if err != nil {
 		return nil, err
 	}
 
-	return c, nil
+	// return new network configuration
+	return &Config{
+		Network:  netConfig,
+		Training: trainConfig,
+	}, nil
 }
 
-func parseLayers(m *Manifest, c *NetConfig) error {
+func parseNetConfig(m *Manifest) (*NetConfig, error) {
 	// INPUT layer configuration
-	if m.Layers.Input.Size <= 0 {
-		return fmt.Errorf("Incorrect size of input layer: %d\n", m.Layers.Input.Size)
+	if m.Network.Input.Size <= 0 {
+		return nil, fmt.Errorf("Incorrect input layer size: %d\n", m.Network.Input.Size)
 	}
-	// set the input size
-	inSize := m.Layers.Input.Size
-	inputLayer := &LayerConfig{Size: inSize, NeurFn: nil}
-	c.Arch.Input = inputLayer
-	c.Arch.Input.Kind = "input"
-	// check feedfwd network architecture
-	if m.Kind == "feedfwd" {
-		// HIDDEN network layer configuration
-		if len(m.Layers.Hidden.Size) != 0 {
-			c.Arch.Hidden = make([]*LayerConfig, len(m.Layers.Hidden.Size))
-			for i, size := range m.Layers.Hidden.Size {
-				c.Arch.Hidden[i] = &LayerConfig{}
-				c.Arch.Hidden[i].Kind = "hidden"
-				c.Arch.Hidden[i].Size = size
-				activation, ok := neurFunc[m.Layers.Hidden.Activation]
-				if !ok {
-					return fmt.Errorf("Unknown activation function: %s\n",
-						m.Layers.Hidden.Activation)
-				}
-				c.Arch.Hidden[i].NeurFn = &NeuronConfig{
-					meta:      m.Layers.Hidden.Activation,
-					ActFn:     activation["act"],
-					ActGradFn: activation["grad"],
-				}
+	inputLayer := &LayerConfig{Kind: "input", Size: m.Network.Input.Size}
+	// HIDDEN network layer configuration
+	var hiddenLayers []*LayerConfig
+	if len(m.Network.Hidden.Size) != 0 {
+		hiddenLayers = make([]*LayerConfig, len(m.Network.Hidden.Size))
+		for i, size := range m.Network.Hidden.Size {
+			if size <= 0 {
+				return nil, fmt.Errorf("Incorrect hidden layer size: %d\n", size)
+			}
+			hiddenLayers[i] = &LayerConfig{
+				Kind: "hidden",
+				Size: size,
+				NeurFn: &NeuronConfig{
+					Activation: m.Network.Hidden.Activation,
+				},
 			}
 		}
 	}
 	// OUTPUT layer configuration
-	if m.Layers.Output.Size <= 0 {
-		return fmt.Errorf("Incorrect output layer size: %d\n", m.Layers.Output.Size)
+	if m.Network.Output.Size <= 0 {
+		return nil, fmt.Errorf("Incorrect output layer size: %d\n", m.Network.Output.Size)
 	}
-	outSize := m.Layers.Output.Size
-	outputLayer := &LayerConfig{Size: outSize}
-	c.Arch.Output = outputLayer
-	c.Arch.Output.Kind = "output"
-	// check if the requested activation is supported
-	activation, ok := neurFunc[m.Layers.Output.Activation]
-	if !ok {
-		return fmt.Errorf("Unknown activation function: %s\n",
-			m.Layers.Output.Activation)
+	outputLayer := &LayerConfig{
+		Kind: "output",
+		Size: m.Network.Output.Size,
+		NeurFn: &NeuronConfig{
+			Activation: m.Network.Output.Activation,
+		},
 	}
-	c.Arch.Output.NeurFn = &NeuronConfig{
-		meta:      m.Layers.Output.Activation,
-		ActFn:     activation["act"],
-		ActGradFn: activation["grad"],
-	}
-	if m.Layers.Output.Activation == "tanh" {
-		c.Arch.Output.NeurFn.ActFn = matrix.TanhOutMx
-	}
-	return nil
+
+	return &NetConfig{
+		Kind: m.Kind,
+		Arch: &NetArch{
+			Input:  inputLayer,
+			Hidden: hiddenLayers,
+			Output: outputLayer,
+		},
+	}, nil
 }
 
-func parseTraining(m *Manifest, c *NetConfig) error {
-	trainAlgs, ok := supported[m.Kind]["training"]
-	if !ok {
-		return fmt.Errorf("No training available for %s neural net.\n", m.Kind)
+func parseOptimConfig(m *Manifest) (*OptimConfig, error) {
+	// optimize Method can't be empty
+	if m.Training.Optimize.Method == "" {
+		return nil, fmt.Errorf("Optimize method can not be empty!\n")
 	}
-	for i := range trainAlgs {
-		if trainAlgs[i] == m.Training.Kind {
-			c.Training.Kind = m.Training.Kind
+	// check if the optimization method is supported
+	var validOptim bool
+	for _, optimizeMethod := range network[m.Kind]["optim"] {
+		if optimizeMethod == m.Training.Optimize.Method {
+			validOptim = true
 			break
 		}
 	}
-	if c.Training.Kind == "" {
-		return fmt.Errorf("Unsupported training algorithm for %s network: %s\n",
-			m.Kind, m.Training.Kind)
+	if !validOptim {
+		return nil, fmt.Errorf("Unsupported optimization method: %s\n",
+			m.Training.Optimize.Method)
 	}
-
-	trainParams, err := helpers.ParseParams(m.Training.Params)
-	if err != nil {
-		return err
-	}
-	c.Training.Params = trainParams
-	return nil
-}
-
-func parseOptimize(m *Manifest, c *NetConfig) error {
-	optimMethods, ok := supported[m.Kind]["optim"]
-	if !ok {
-		return fmt.Errorf("Unsupported optimization method: %s\n", m.Optimize.Method)
-	}
-	c.Training.Optimize = &OptimConfig{}
-	for i := range optimMethods {
-		if optimMethods[i] == m.Optimize.Method {
-			c.Training.Optimize.Method = m.Optimize.Method
-			break
-		}
-	}
-	if c.Training.Optimize.Method == "" {
-		return fmt.Errorf("Unsupported optimization method for %s network: %s\n",
-			m.Kind, m.Optimize.Method)
-	}
-	if m.Optimize.Iterations <= 0 {
-		c.Training.Optimize.Iterations = 20
+	// check number of iterations
+	var iters int
+	if m.Training.Optimize.Iterations <= 0 {
+		iters = 20
 	} else {
-		c.Training.Optimize.Iterations = m.Optimize.Iterations
+		iters = m.Training.Optimize.Iterations
 	}
-	return nil
+
+	return &OptimConfig{
+		Method:     m.Training.Optimize.Method,
+		Iterations: iters,
+	}, nil
+}
+
+func parseTrainConfig(m *Manifest) (*TrainConfig, error) {
+	// training kind can't be empty
+	if m.Training.Kind == "" {
+		return nil, fmt.Errorf("Training kind can not be empty!\n")
+	}
+	// check if the requested training algorithm is supported
+	var validTraining bool
+	for _, trainingKind := range network[m.Kind]["training"] {
+		if trainingKind == m.Training.Kind {
+			validTraining = true
+			break
+		}
+	}
+	if !validTraining {
+		return nil, fmt.Errorf("Unsupported training requested: %s\n", m.Training.Kind)
+	}
+
+	// check training cost function
+	if m.Training.Cost == "" {
+		return nil, fmt.Errorf("Cost function can not be empty!\n")
+	}
+
+	// check lambda parameter
+	if m.Training.Params.Lambda < 0 {
+		return nil, fmt.Errorf("Incorrect reg parameter: %f\n", m.Training.Params.Lambda)
+	}
+
+	// parse optimization config
+	optimize, err := parseOptimConfig(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// return train config
+	return &TrainConfig{
+		Kind:     m.Training.Kind,
+		Cost:     m.Training.Cost,
+		Lambda:   m.Training.Params.Lambda,
+		Optimize: optimize,
+	}, nil
 }

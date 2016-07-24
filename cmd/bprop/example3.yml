@@ -1,6 +1,6 @@
 kind: feedfwd
 task: class
-layers:
+network:
   input:
     size: 400
   hidden:
@@ -11,7 +11,9 @@ layers:
     activation: tanh
 training:
   kind: backprop
-  params: "lambda=1.0"
-optimize:
-  method: bfgs
-  iterations: 173
+  cost: xentropy
+  params:
+    lambda: 1.0
+  optimize:
+    method: bfgs
+    iterations: 173

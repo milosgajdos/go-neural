@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gonum/matrix/mat64"
+	"github.com/gonum/optimize"
 	"github.com/milosgajdos83/go-neural/pkg/config"
 	"github.com/milosgajdos83/go-neural/pkg/helpers"
 	"github.com/milosgajdos83/go-neural/pkg/matrix"
@@ -14,14 +15,14 @@ const (
 	FEEDFWD NetworkKind = iota + 1
 )
 
+// optim maps optimization algorithm names to their actual implementations
+var optim = map[string]optimize.Method{
+	"bfgs": &optimize.BFGS{},
+}
+
 // kindMap maps strings to NetworkKind
 var netKind = map[string]NetworkKind{
 	"feedfwd": FEEDFWD,
-}
-
-// supported neural network types
-var supported = map[string]func(*config.NetConfig) (*Network, error){
-	"feedfwd": createFeedFwdNetwork,
 }
 
 // NetworkKind defines a type of neural network
@@ -37,6 +38,11 @@ func (n NetworkKind) String() string {
 	}
 }
 
+// network maps supported neural network types to their constructors
+var network = map[string]func(*config.NetArch) (*Network, error){
+	"feedfwd": createFeedFwdNetwork,
+}
+
 // Network represents Neural Network
 type Network struct {
 	id     string
@@ -44,44 +50,44 @@ type Network struct {
 	layers []*Layer
 }
 
-// NewNetwork creates new Neural Network based on the passed in parameters.
-// It fails with error if either the unsupported network kind has been requested or
-// if any of the neural network layers failed to be created. This can be due to
-// incorrect network architecture i.e. mismatched neural layer dimensions.
+// NewNetwork creates new Neural Network based on the passed in configuration parameters.
+// It fails with error if either the requested network type is not supported or
+// if any of the neural network layers failed to be created.
 func NewNetwork(c *config.NetConfig) (*Network, error) {
 	if c == nil {
-		return nil, fmt.Errorf("Invalid config supplied: %v\n", c)
+		return nil, fmt.Errorf("Invalid network configuration supplied: %v\n", c)
 	}
-	// check if the requested network is supported
-	createNet, ok := supported[c.Kind]
+	// check if the requested network is supported and retrieve its constructor
+	createNet, ok := network[c.Kind]
 	if !ok {
 		return nil, fmt.Errorf("Unsupported neural network type: %s\n", c.Kind)
 	}
 	// return network
-	return createNet(c)
+	return createNet(c.Arch)
 }
 
 // createFeedFwdNetwork creates feedforward neural network or fails with error
-func createFeedFwdNetwork(c *config.NetConfig) (*Network, error) {
-	// you must supply network architecture
-	if c.Arch == nil {
-		return nil, fmt.Errorf("Invalid network architecture supplied: %v\n", c.Arch)
+func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
+	// check if the supplied architecture is not nil
+	if arch == nil {
+		return nil, fmt.Errorf("Incorrect architecture supplied: %v\n", arch)
 	}
+	// create new network
 	net := &Network{}
 	net.id = helpers.PseudoRandString(10)
-	net.kind = netKind[c.Kind]
-	// Create INPUT layer: feedfwd network INPUT layer has no activation function
-	layerInSize := c.Arch.Input.Size
-	inLayer, err := NewLayer(c.Arch.Input, c.Arch.Input.Size)
+	net.kind = FEEDFWD
+	// Create INPUT layer: INPUT layer has no activation function
+	layerInSize := arch.Input.Size
+	inLayer, err := NewLayer(arch.Input, arch.Input.Size)
 	if err != nil {
 		return nil, err
 	}
-	// add neural net layer
+	// add neural net layer to network
 	if err := net.AddLayer(inLayer); err != nil {
 		return nil, err
 	}
 	// create HIDDEN layers
-	for _, layerConfig := range c.Arch.Hidden {
+	for _, layerConfig := range arch.Hidden {
 		layer, err := NewLayer(layerConfig, layerInSize)
 		if err != nil {
 			return nil, err
@@ -94,7 +100,7 @@ func createFeedFwdNetwork(c *config.NetConfig) (*Network, error) {
 		layerInSize = layerConfig.Size
 	}
 	// Create OUTPUT layer
-	outLayer, err := NewLayer(c.Arch.Output, layerInSize)
+	outLayer, err := NewLayer(arch.Output, layerInSize)
 	if err != nil {
 		return nil, err
 	}
@@ -111,14 +117,15 @@ func createFeedFwdNetwork(c *config.NetConfig) (*Network, error) {
 // 2. HIDDEN layer - new HIDDEN layer is appened after the last HIDDEN layer
 // 3. OUTPUT layer - there must only be one OUTPUT layer
 // AddLayer fails with error if either 1. or 3. are not satisfied
+// TODO: simplify this madness
 func (n *Network) AddLayer(layer *Layer) error {
-	nrLayers := len(n.layers)
+	layerCount := len(n.layers)
 	// if no layer exists yet, just append
-	if nrLayers == 0 {
+	if layerCount == 0 {
 		n.layers = append(n.layers, layer)
 	}
 	// if one layer already exists it depends on which one we are adding
-	if nrLayers == 1 {
+	if layerCount == 1 {
 		switch n.layers[0].Kind() {
 		case INPUT:
 			if layer.Kind() == INPUT {
@@ -134,7 +141,7 @@ func (n *Network) AddLayer(layer *Layer) error {
 			n.layers = append(n.layers, layer)
 		}
 	}
-	if nrLayers > 1 {
+	if layerCount > 1 {
 		switch layer.Kind() {
 		case INPUT:
 			if n.layers[0].Kind() == INPUT {
@@ -143,7 +150,7 @@ func (n *Network) AddLayer(layer *Layer) error {
 			// Prepend - i.e. place INPUT at the first position
 			n.layers = append([]*Layer{layer}, n.layers...)
 		case OUTPUT:
-			if n.layers[nrLayers-1].Kind() == OUTPUT {
+			if n.layers[layerCount-1].Kind() == OUTPUT {
 				return fmt.Errorf("Can't create multiple OUTPUT layers\n")
 			}
 			// append at the end
@@ -219,13 +226,13 @@ func (n *Network) doForwardProp(inMx mat64.Matrix, from, to int) (mat64.Matrix, 
 // from layer specified via parameter and calculates error deltas for each network layer.
 // It fails with error if either the supplied input and delta matrices are nil or if the specified
 // from boundary goes beyond the first network layer that can have output errors calculated
-func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
+func (n *Network) BackProp(inMx, errMx mat64.Matrix, fromLayer int) error {
 	if inMx == nil {
 		return fmt.Errorf("Can't backpropagate input: %v\n", inMx)
 	}
 	// can't BP empty error
-	if deltaMx == nil {
-		return fmt.Errorf("Can't backpropagate ouput error: %v\n", deltaMx)
+	if errMx == nil {
+		return fmt.Errorf("Can't backpropagate ouput error: %v\n", errMx)
 	}
 	// get all the layers
 	layers := n.Layers()
@@ -234,7 +241,7 @@ func (n *Network) BackProp(inMx, deltaMx mat64.Matrix, fromLayer int) error {
 		return fmt.Errorf("Cant backpropagate beyond first layer: %d\n", len(layers))
 	}
 	// perform the actual back propagation till the first hidden layer
-	return n.doBackProp(inMx, deltaMx, fromLayer, 1)
+	return n.doBackProp(inMx, errMx, fromLayer, 1)
 }
 
 // doBackProp performs the actual backpropagation
@@ -278,9 +285,213 @@ func (n *Network) doBackProp(inMx, errMx mat64.Matrix, from, to int) error {
 	// compute gradient matrix
 	gradMx := new(mat64.Dense)
 	gradMx.Mul(biasActInMx, weightsErrMx.T())
-	gradMx.Apply(weightsErrLayer.ActGradFn(), gradMx)
+	gradMx.Apply(weightsErrLayer.ActGrad(), gradMx)
 	gradMx.MulElem(layerErr.T(), gradMx)
 	return n.doBackProp(inMx, gradMx, from-1, to)
+}
+
+// costMap maps name of cost to their actual implementations
+var trainCost = map[string]Cost{
+	"xentropy": CrossEntropy{},
+	"loglike":  LogLikelihood{},
+}
+
+// ValidateTrainConfig validates training configuration.
+// It returns error if any of the supplied configuration parameters are invalid.
+func ValidateTrainConfig(c *config.TrainConfig) error {
+	// config can't be nil
+	if c == nil {
+		return fmt.Errorf("Incorrect configuration supplied: %v\n", c)
+	}
+	// check if the requested training is supported
+	if _, ok := trainCost[c.Cost]; !ok {
+		return fmt.Errorf("Unsupported training cost: %s\n", c.Cost)
+	}
+	// Incorrect lambda supplied
+	if c.Lambda < 0 {
+		return fmt.Errorf("Incorrect regularizer supplied: %f\n", c.Lambda)
+	}
+	// if the optimization method is not supported
+	if _, ok := optim[c.Optimize.Method]; !ok {
+		return fmt.Errorf("Unsupported optimization method: %s\n", c.Optimize.Method)
+	}
+	// incorrect number of iterations supplied
+	if c.Optimize.Iterations <= 0 {
+		return fmt.Errorf("Incorrect number of iterations: %d\n", c.Optimize.Iterations)
+	}
+	return nil
+}
+
+// Train trains feedforward neural network per configuration passed in as parameter.
+// It returns error if either the training configuration is invalid ot the training fails.
+func (n *Network) Train(c *config.TrainConfig, inMx *mat64.Dense, labelsVec *mat64.Vector) error {
+	// validate the supplied configuration
+	if err := ValidateTrainConfig(c); err != nil {
+		return err
+	}
+	// input matrix can't be nil
+	if inMx == nil {
+		return fmt.Errorf("Incorrect input supplied: %v\n", inMx)
+	}
+	// output labels can't be nil
+	if labelsVec == nil {
+		return fmt.Errorf("Incorrect lables supplied: %v\n", labelsVec)
+	}
+	// costFunc for optimization
+	costFunc := func(x []float64) float64 {
+		curCost, err := n.getCost(c, x, inMx, labelsVec)
+		if err != nil {
+			panic(err)
+		}
+		// TODO: can be nebled via verbose flag
+		fmt.Printf("Current Cost: %f\n", curCost)
+		return curCost
+	}
+	// gradfunc for optimization
+	gradFunc := func(grad []float64, x []float64) {
+		curGrad, err := n.getGradient(c, x, inMx, labelsVec)
+		if err != nil {
+			panic(err)
+		}
+		cdata := copy(grad, curGrad)
+		if len(curGrad) != cdata {
+			panic("Could not calculate gradient!")
+		}
+	}
+	// initialize parameters
+	var initWeights []float64
+	layers := n.Layers()
+	for i := range layers[1:] {
+		initWeights = append(initWeights, matrix.Mx2Vec(layers[i+1].Weights(), false)...)
+	}
+	// optimization problem settings
+	p := optimize.Problem{
+		Func: costFunc,
+		Grad: gradFunc,
+	}
+	settings := optimize.DefaultSettings()
+	settings.Recorder = nil
+	settings.FunctionConverge = nil
+	settings.MajorIterations = c.Optimize.Iterations
+	// run the optimization
+	result, err := optimize.Local(p, initWeights, settings, optim[c.Optimize.Method])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Result status: %s\n", result.Status)
+	return nil
+}
+
+// getCost calculates the cost of the neural network output for given input and expected output.
+func (n *Network) getCost(c *config.TrainConfig, weights []float64,
+	inMx *mat64.Dense, labelsVec *mat64.Vector) (float64, error) {
+	// get all network layers
+	layers := n.Layers()
+	// if we supply network weights, set the neural network to provided weights
+	if weights != nil {
+		if err := setNetWeights(layers[1:], weights); err != nil {
+			return -1.0, err
+		}
+	}
+	// run forward propagation from INPUT layer
+	outMx, err := n.ForwardProp(inMx, len(layers)-1)
+	if err != nil {
+		return -1.0, err
+	}
+	// labelsMx is one-of-N matrix for each output label
+	// i.e. 3rd label would be: 0 0 1 0 0 etc.
+	_, labelCount := outMx.Dims()
+	labelsMx, err := matrix.MakeLabelsMx(labelsVec, labelCount)
+	if err != nil {
+		return -1.0, err
+	}
+	// calculate cost
+	tc, _ := trainCost[c.Cost]
+	cost := tc.CostFunc(inMx, outMx, labelsMx)
+	// number of data samples
+	samples, _ := inMx.Dims()
+	reg := 0.0
+	// if regularizer is not 0, calculate L2-regularization
+	if c.Lambda > 0 {
+		// Ignore first layer i.e. input layer
+		for _, layer := range layers[1:] {
+			r, c := layer.Weights().Dims()
+			// Don't penalize bias units
+			weightsMx := layer.Weights().View(0, 1, r, c-1)
+			sqrMx := new(mat64.Dense)
+			sqrMx.Apply(matrix.PowMx(2), weightsMx)
+			reg += mat64.Sum(sqrMx)
+		}
+		reg = (c.Lambda / (2 * float64(samples))) * reg
+	}
+	return cost + reg, nil
+}
+
+// getGradient calculates network gradient for a particular network and configuration
+// It returns a gradient slice or fails with error
+func (n *Network) getGradient(c *config.TrainConfig, weights []float64,
+	inMx *mat64.Dense, labelsVec *mat64.Vector) ([]float64, error) {
+	// get all network layers
+	layers := n.Layers()
+	// if we supply network weights, set the neural network to provided weights
+	if weights != nil {
+		if err := setNetWeights(layers[1:], weights); err != nil {
+			return nil, err
+		}
+	}
+	// run full forward propagation
+	outMx, err := n.ForwardProp(inMx, len(layers)-1)
+	if err != nil {
+		return nil, err
+	}
+	// labelsMx is one-of-N matrix for each output label
+	// i.e. 3rd label would be: 0 0 1 0 0 etc.
+	_, labelCount := outMx.Dims()
+	labelsMx, err := matrix.MakeLabelsMx(labelsVec, labelCount)
+	if err != nil {
+		return nil, err
+	}
+	// number of data samples
+	samples, _ := inMx.Dims()
+	// iterate through all samples and calculate errors and corrections
+	for i := 0; i < samples; i++ {
+		// input vector
+		inVec := inMx.RowView(i)
+		// expected output
+		expVec := labelsMx.RowView(i)
+		// output from output layer - safe switch type - ForwardProp returns *mat64.Dense
+		outVec := (outMx.(*mat64.Dense)).RowView(i)
+		// calculate the error = out - y
+		tc, _ := trainCost[c.Cost]
+		deltaVec := tc.Delta(outVec, expVec)
+		// run the backpropagation
+		if err := n.BackProp(inVec.T(), deltaVec.T(), len(layers)-1); err != nil {
+			return nil, err
+		}
+	}
+	// calculate the gradient and update network weights
+	var gradient []float64
+	// skip zero layer - INPUT layer has no Deltas
+	for i := 1; i < len(layers); i++ {
+		layer := layers[i]
+		deltas := layer.Deltas()
+		deltas.Scale(1/float64(samples), deltas)
+		if c.Lambda > 0.0 {
+			rows, cols := layer.Weights().Dims()
+			regWeights := mat64.NewDense(rows, cols, nil)
+			reg := c.Lambda / float64(samples)
+			regWeights.Clone(layer.Weights())
+			// set the first column to 0
+			zeros := make([]float64, rows)
+			regWeights.SetCol(0, zeros)
+			regWeights.Scale(reg, regWeights)
+			// Update particular layer deltas matrix
+			regWeights.Add(deltas, regWeights)
+			gradVec := matrix.Mx2Vec(regWeights, false)
+			gradient = append(gradient, gradVec...)
+		}
+	}
+	return gradient, nil
 }
 
 // Classify classifies the provided data vector to a particular label class.
@@ -347,4 +558,25 @@ func (n *Network) Validate(valInMx *mat64.Dense, valOut *mat64.Vector) (float64,
 	}
 	success := (hits / float64(valOut.Len())) * 100
 	return success, nil
+}
+
+// setNetWeights sets weights of provided network layers to values supplied via weights slice
+// The new weights are stored in weights slice which is then rolled into particular layer's
+// weights matrix layer by layer. It fails with error if the supplied weights slice
+// does not contain enough elements
+func setNetWeights(layers []*Layer, weights []float64) error {
+	acc := 0
+	wLen := len(weights)
+	for _, layer := range layers {
+		r, c := layer.Weights().Dims()
+		if (wLen - acc) < r*c {
+			return fmt.Errorf("Insufficient number of weights supplied %d\n", wLen)
+		}
+		err := matrix.SetMx2Vec(layer.Weights(), weights[acc:(acc+r*c)], false)
+		if err != nil {
+			return err
+		}
+		acc += r * c
+	}
+	return nil
 }
