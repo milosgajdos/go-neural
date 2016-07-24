@@ -165,8 +165,8 @@ func (n *Network) AddLayer(layer *Layer) error {
 			}
 			// expand capacity
 			n.layers = append(n.layers, nil)
-			copy(n.layers[lastHidden+1:], n.layers[lastHidden:])
-			n.layers[lastHidden] = layer
+			copy(n.layers[lastHidden+2:], n.layers[lastHidden+1:])
+			n.layers[lastHidden+1] = layer
 		}
 	}
 	return nil

@@ -4,7 +4,7 @@ network:
   input:
     size: 400
   hidden:
-    size: [25]
+    size: [25, 20]
     activation: relu
   output:
     size: 10
