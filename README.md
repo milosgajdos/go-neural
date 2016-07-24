@@ -6,13 +6,13 @@
 [![Go Report Card](https://goreportcard.com/badge/milosgajdos83/go-neural)](https://goreportcard.com/report/github.com/milosgajdos83/go-neural)
 [![codecov](https://codecov.io/gh/milosgajdos83/go-neural/branch/master/graph/badge.svg)](https://codecov.io/gh/milosgajdos83/go-neural)
 
-This project will contain basic implementations of various Neural Networks learning algorithms. You will find here simple examples in the projects `cmd/` subfolders. Currently there is only an example implementation of [backpropagation algorithm](https://en.wikipedia.org/wiki/Backpropagation) for a 3 layers [feedforward neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network) multivariate classifier. In the future I will be hopefully adding more interesting and more advanced learning algorithms for different kinds of neural networks.
+This project provides a basic implementation of Feedforward Neural Network classifier. You can find an example implementation of [backpropagation algorithm](https://en.wikipedia.org/wiki/Backpropagation) for a 3 layers [feedforward neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network) multivariate classifier in the project's `cmd/` subfolder. In the future I will be hopefully adding more interesting and more advanced examples.
 
 The code in this project has been developed and tested with the following version of Go:
 
 ```
 $ go version
-go version go1.6.2 darwin/amd64
+go version go1.6.3 darwin/amd64
 ```
 
 ## Get started
@@ -22,31 +22,52 @@ Get the source code:
 ```
 $ go get -u github.com/milosgajdos83/go-neural
 ```
- 
- Once you have successfully downloaded the package you can start building simple neural network programs using the packages provided by the project. For example, if you want to create a simple feedforward neural network you can do so using the following code:
- 
+
+Once you have successfully downloaded all the packages you can start building simple neural networks using the packages provided by the project. For example, if you want to create a simple feedforward neural network you can do so using the following code:
+
  ```go
- package main
+package main
 
 import (
 	"fmt"
 	"os"
 
 	"github.com/milosgajdos83/go-neural/neural"
-	"github.com/milosgajdos83/go-neural/pkg/matrix"
+	"github.com/milosgajdos83/go-neural/pkg/config"
 )
 
 func main() {
-	nf := &neural.NeuronFunc{ForwFn: matrix.SigmoidMx, BackFn: matrix.SigmoidGradMx}
-	hiddenLayers := []int{4, 5}
-	arch := &neural.NetworkArch{Input: 10, Hidden: hiddenLayers, Output: 10}
-	config := &neural.Config{Kind: neural.FEEDFWD, Arch: arch, ActFunc: nf}
-	net, err := neural.NewNetwork(config)
+	netConfig := &config.NetConfig{
+		Kind: "feedfwd",
+		Arch: &config.NetArch{
+			Input: &config.LayerConfig{
+				Kind: "input",
+				Size: 100,
+			},
+			Hidden: []*config.LayerConfig{
+				&config.LayerConfig{
+					Kind: "hidden",
+					Size: 25,
+					NeurFn: &config.NeuronConfig{
+						Activation: "sigmoid",
+					},
+				},
+			},
+			Output: &config.LayerConfig{
+				Kind: "output",
+				Size: 500,
+				NeurFn: &config.NeuronConfig{
+					Activation: "softmax",
+				},
+			},
+		},
+	}
+	net, err := neural.NewNetwork(netConfig)
 	if err != nil {
 		fmt.Printf("Error creating network: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Create new %s neural network: %s\n", net.Kind(), net.ID())
+	fmt.Printf("Created new neural network: %v\n", net)
 }
 ```
 
@@ -54,33 +75,35 @@ You can explore the project's packages and API in [godoc](https://godoc.org/gith
 
 ## Manifest
 
-`go-neural` lets you define your neural network architecture via what's called a `manifest` file which you can parse in your programs using a simple manifest parser package. An example manifest file looks like below:
+`go-neural` lets you define neural network architecture via what's called a `manifest` file which you can parse in your programs using the project's manifest parser package. An example manifest file looks like below:
 
 ```yaml
-kind: feedfwd
-task: class
-layers:
-  input:
-    size: 400
-  hidden:
-    size: [25]
-    activation: relu
-  output:
-    size: 10
-    activation: softmax
-training:
-  kind: backprop
-  params: "lambda=1.0"
-optimize:
-  method: bfgs
-  iterations: 80
+kind: feedfwd                 # network type: only feedforward networks
+task: class                   # network task: only classification tasks
+network:                      # network architecture: layers and activations
+  input:                      # INPUT layer
+    size: 400                 # 400 inputs
+  hidden:                     # HIDDEN layer
+    size: [25]                # Array of all hidden layers
+    activation: relu          # ReLU activation function
+  output:                     # OUTPUT layer
+    size: 10                  # 10 outputs - this implies 10 classes
+    activation: softmax       # softmax activation function
+training:                     # network training
+  kind: backprop              # type of training: backpropagation only
+  cost: xentropy              # cost function: cross entropy (loglikelhood available too)
+  params:                     # training parameters
+    lambda: 1.0               # lambda is a regularizer
+  optimize:                   # optimization parameters
+    method: bfgs              # BFGS optimization algorithm
+    iterations: 80            # 80 BFGS iterations
 ```
 
-The above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also notice that you can specify some parameters that are passed to the backpropagation algorithm as well as some optmization parameters.
+The above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also specify some advanced optmization parameters. You can explore all available parameters in `config` package.
 
 ## Backpropagation
 
-Project provides an example program available in `cmd/bprop` directory which performs classification of digits from the `0-9` range and then reports the resulting classification success rate. The network accuracy is validated against the training data set. In real life example you should use a separate validation data set! Lastly, the example program also reports classification result for the first data sample.
+The project provides an example program available in `cmd/bprop` directory which performs a classification of MNIST digits and then reports the classification success rate. The network accuracy is validated against the training data set for brevity. In real life example you must use a separate validation data set! Lastly, the example program also reports classification result for the first data sample.
 
 You can build the example program by running `bprop` make task:
 
@@ -90,21 +113,20 @@ $ make bprop
 
 This will place the resulting binary into `_build` project's subdirectory if the build succeeds. To test the program, there is an example data set available in the `testdata` subdirectory which contains a sample of 5000 images from [MNIST](http://yann.lecun.com/exdb/mnist/) database for training and validation.
 
-You can see various example runs with different parameters specified via manifest file below. You can find the example manifest files in `cmd/bprop` folder of the project source tree.
+You can see various example runs with different parameters specified via manifest file below. You can find various examples of manifest files in `cmd/bprop` folder of the project source tree.
 
-### ReLU -> Softmax
+### ReLU -> Softmax -> Cross Entropy
 
 ```
 $ time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example.yml
-Current Cost: 3.415054
-Current Cost: 3.081002
-Current Cost: 2.725169
+Current Cost: 3.421197
+Current Cost: 3.087151
+Current Cost: 2.731485
 ...
 ...
-Current Cost: 0.041690
-Current Cost: 0.039663
-Current Cost: 0.037856
-Current Cost: 0.037296
+Current Cost: 0.088055
+Current Cost: 0.086561
+Current Cost: 0.085719
 Result status: IterationLimit
 
 Neural net accuracy: 99.960000
@@ -121,89 +143,45 @@ Classification result:
 ⎢ 0.0002904105962281858⎥
 ⎣     99.98743247247788⎦
 
-
 real	1m40.244s
 user	1m38.561s
 sys	0m6.071s
 ```
 
-You can see that the neural network accuracy on the training data set is staggering `99.96%` and that network classifies the first sample to the correct class with `99.98%` probability. Pretty awesome ☺️
+You can see that the neural network classification accuracy **on the training data set** is `99.96%` and that network classifies the first sample to the correct class with `99.98%` probability. This is clearly an example of overfitting.
 
-### Sigmoid -> Softmax
+### ReLU -> Softmax -> Log Likelihood
+
 ```
-$ time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example2.yml
-Current Cost: 3.341391
-Current Cost: 3.250739
-Current Cost: 3.126012
-Current Cost: 2.905813
-Current Cost: 2.562841
+time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example4.yml
+Current Cost: 2.455806
+Current Cost: 2.157898
+Current Cost: 1.858962
 ...
 ...
-Current Cost: 0.243739
-Current Cost: 0.234082
-Current Cost: 0.227347
-Current Cost: 0.225749
+Current Cost: 0.070446
+Current Cost: 0.069825
+Current Cost: 0.069216
 Result status: IterationLimit
 
-Neural net accuracy: 96.820000
+Neural net accuracy: 99.960000
 
 Classification result:
-⎡0.00021616794862335984⎤
-⎢  0.033884368797300564⎥
-⎢  0.003877769382182497⎥
-⎢2.5445434981607396e-05⎥
-⎢  0.028102698328725285⎥
-⎢ 0.0010378827363716836⎥
-⎢   0.09126650795952473⎥
-⎢ 0.0006346632491998938⎥
-⎢  0.015888682987386542⎥
-⎣     99.82506581317571⎦
+⎡ 3.046878477304935e-10⎤
+⎢    0.0315965041728176⎥
+⎢2.1424486587649327e-05⎥
+⎢ 5.349015780043783e-12⎥
+⎢ 5.797172277201534e-07⎥
+⎢ 2.132650877255262e-08⎥
+⎢ 5.525355134815623e-06⎥
+⎢  2.58203420693211e-07⎥
+⎢ 0.0004521601957074575⎥
+⎣     99.96792352623254⎦
 
 
-real	1m18.432s
-user	1m21.314s
-sys	0m5.474s
+real    1m28.066s
+user    1m34.502s
+sys     0m6.913s
 ```
 
-You can see that the neural network accuracy on the training data set is staggering `96.82%` and that network classifies the first sample to the correct class with `99.82%` probability. This is a bit worse than the previous configuration.
-
-
-### tanh -> tanh
-```
-$ time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example3.yml
-Current Cost: 8.301051
-Current Cost: 3.982616
-Current Cost: 3.464993
-Current Cost: 3.095790
-Current Cost: 2.874504
-...
-...
-Current Cost: 0.174036
-Current Cost: 0.171023
-Current Cost: 0.167725
-Current Cost: 0.166274
-Current Cost: 0.166334
-Current Cost: 0.166211
-Result status: IterationLimit
-
-Neural net accuracy: 98.500000
-
-Classification result:
-⎡ 3.851416213218354e-05⎤
-⎢  0.000887320935591917⎥
-⎢   0.08430464866100201⎥
-⎢1.8784497566246995e-09⎥
-⎢  0.006346359320569978⎥
-⎢  0.005993924083999875⎥
-⎢  0.000956220309679265⎥
-⎢  3.70271079686156e-05⎥
-⎢   0.02248533121878889⎥
-⎣      99.8789506523218⎦
-
-
-real	3m9.253s
-user	3m20.706s
-sys	0m12.341s
-```
-
-You can see that the neural network accuracy on the training data set is staggering `98.5%` and that network classifies the first sample to the correct class with `99.87%` probability. A bit better than the sigmoid example, but still worse thatn ReLU+Softmax.
+`ReLU -> Softmax -> Log Likelihood` provides much faster convergence than the previous combination of activations and loss functions. Again, you can see that we are overfitting the training data. In real life you must tune your neural network on separate training, validation and test data sets!

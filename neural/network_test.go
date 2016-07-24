@@ -15,32 +15,46 @@ import (
 )
 
 var (
-	fileName = "manifest.yml"
+	fileName  = "manifest.yml"
+	inMx      *mat64.Dense
+	labelsVec *mat64.Vector
 )
 
 func setup() {
 	content := []byte(`kind: feedfwd
 task: class
-layers:
+network:
   input:
-    size: 400
+    size: 4
   hidden:
-    size: [25]
+    size: [5]
     activation: sigmoid
   output:
-    size: 10
+    size: 5
     activation: softmax
 training:
   kind: backprop
-  params: "lambda=1.0"
-optimize:
-  method: bfgs
-  iterations: 69`)
+  cost: xentropy
+  params:
+    lambda: 1.0
+  optimize:
+    method: bfgs
+    iterations: 2`)
 
 	tmpPath := filepath.Join(os.TempDir(), fileName)
 	if err := ioutil.WriteFile(tmpPath, content, 0666); err != nil {
 		log.Fatal(err)
 	}
+
+	// Create features matrix
+	features := []float64{5.1, 3.5, 1.4, 0.1,
+		4.9, 3.0, 1.4, 0.2,
+		4.7, 3.2, 1.3, 0.3,
+		4.6, 3.1, 1.5, 0.4,
+		5.0, 3.6, 1.4, 0.5}
+	inMx = mat64.NewDense(5, 4, features)
+	labels := []float64{2.0, 1.0, 3.0, 2.0, 4.0}
+	labelsVec = mat64.NewVector(len(labels), labels)
 }
 
 func teardown() {
@@ -78,9 +92,11 @@ func TestNewNetwork(t *testing.T) {
 	assert := assert.New(t)
 	// basic configuration settings
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
-	assert.NotNil(c)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
 	assert.NoError(err)
+	// Config.Network
+	c := conf.Network
 	// create new network
 	n, err := NewNetwork(c)
 	assert.NotNil(n)
@@ -89,33 +105,51 @@ func TestNewNetwork(t *testing.T) {
 	n, err = NewNetwork(nil)
 	assert.Nil(n)
 	assert.Error(err)
-	// unknown network
+	// unknown network kind
 	c.Kind = "foobar"
 	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
-	// nil architecture
 	c.Kind = "feedfwd"
-	na := c.Arch
+	// nil architecture
+	origArch := c.Arch
 	c.Arch = nil
 	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
-	// zero size INPUT layer
-	c.Arch = na
+	c.Arch = origArch
+	// incorrect INPUT layer size
+	origInSize := c.Arch.Input.Size
 	c.Arch.Input.Size = -100
 	n, err = NewNetwork(c)
 	assert.Nil(n)
 	assert.Error(err)
+	c.Arch.Input.Size = origInSize
+	// incorrect HIDDEN layer size
+	origHidSize := c.Arch.Hidden[0].Size
+	c.Arch.Hidden[0].Size = -100
+	n, err = NewNetwork(c)
+	assert.Nil(n)
+	assert.Error(err)
+	c.Arch.Hidden[0].Size = origHidSize
+	// incorrect OUTPUT layer size
+	origOutSize := c.Arch.Output.Size
+	c.Arch.Output.Size = -100
+	n, err = NewNetwork(c)
+	assert.Nil(n)
+	assert.Error(err)
+	c.Arch.Output.Size = origOutSize
 }
 
 func TestAddLayer(t *testing.T) {
 	assert := assert.New(t)
 	// basic configuration settings
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
-	assert.NotNil(c)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
 	assert.NoError(err)
+	// Config.Network
+	c := conf.Network
 	// create new network
 	n, err := NewNetwork(c)
 	assert.NotNil(n)
@@ -147,10 +181,10 @@ func TestID(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
+	c, err := config.New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
-	n, err := NewNetwork(c)
+	n, err := NewNetwork(c.Network)
 	assert.NotNil(n)
 	assert.NoError(err)
 	assert.Len(n.ID(), 10)
@@ -160,11 +194,11 @@ func TestKind(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
+	c, err := config.New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
 	// create dummy network
-	n, err := NewNetwork(c)
+	n, err := NewNetwork(c.Network)
 	assert.NotNil(n)
 	assert.NoError(err)
 	assert.Equal(n.Kind(), FEEDFWD)
@@ -174,15 +208,15 @@ func TestLayers(t *testing.T) {
 	assert := assert.New(t)
 	// create dummy network
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
+	c, err := config.New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
-	n, err := NewNetwork(c)
+	n, err := NewNetwork(c.Network)
 	assert.NotNil(n)
 	assert.NoError(err)
 	layers := n.Layers()
 	assert.NotNil(layers)
-	assert.Equal(len(layers), 3)
+	assert.True(len(layers) > 0)
 	// INPUT layer must be of INPUT kind
 	layerKind := layers[0].Kind()
 	assert.Equal(layerKind, INPUT)
@@ -207,22 +241,22 @@ func TestForwardProp(t *testing.T) {
 	inRows, inCols := inMx.Dims()
 	// create test network
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
+	c, err := config.New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
 	// simplify the config
-	c.Arch.Input.Size = inCols
+	c.Network.Arch.Input.Size = inCols
 	hiddenLayers := []*config.LayerConfig{
 		{Kind: "hidden",
 			Size: 5,
 			NeurFn: &config.NeuronConfig{
-				ActFn:     matrix.SigmoidMx,
-				ActGradFn: matrix.SigmoidGradMx},
+				Activation: "sigmoid",
+			},
 		},
 	}
-	c.Arch.Hidden = hiddenLayers
-	c.Arch.Output.Size = 5
-	net, err := NewNetwork(c)
+	c.Network.Arch.Hidden = hiddenLayers
+	c.Network.Arch.Output.Size = 5
+	net, err := NewNetwork(c.Network)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// retrieve layers
@@ -243,14 +277,14 @@ func TestForwardProp(t *testing.T) {
 	assert.NoError(err)
 	outRows, outCols := out.Dims()
 	assert.Equal(outRows, inRows)
-	assert.Equal(outCols, c.Arch.Output.Size)
+	assert.Equal(outCols, c.Network.Arch.Output.Size)
 	// Propagate to the hidden layer
 	out, err = net.ForwardProp(inMx, len(layers)-2)
 	assert.NotNil(out)
 	assert.NoError(err)
 	outRows, outCols = out.Dims()
 	assert.Equal(outRows, inRows)
-	assert.Equal(outCols, c.Arch.Hidden[0].Size)
+	assert.Equal(outCols, c.Network.Arch.Hidden[0].Size)
 	// can't fwd propagate nil input
 	out, err = net.ForwardProp(nil, len(layers)-1)
 	assert.Nil(out)
@@ -275,22 +309,22 @@ func TestBackProp(t *testing.T) {
 	_, inCols := inMx.Dims()
 	// create test network
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
+	c, err := config.New(tmpPath)
 	assert.NotNil(c)
 	assert.NoError(err)
 	// simplify the config
-	c.Arch.Input.Size = inCols
+	c.Network.Arch.Input.Size = inCols
 	hiddenLayers := []*config.LayerConfig{
 		{Kind: "hidden",
 			Size: 5,
 			NeurFn: &config.NeuronConfig{
-				ActFn:     matrix.SigmoidMx,
-				ActGradFn: matrix.SigmoidGradMx},
+				Activation: "sigmoid",
+			},
 		},
 	}
-	c.Arch.Hidden = hiddenLayers
-	c.Arch.Output.Size = 5
-	net, err := NewNetwork(c)
+	c.Network.Arch.Hidden = hiddenLayers
+	c.Network.Arch.Output.Size = 5
+	net, err := NewNetwork(c.Network)
 	assert.NotNil(net)
 	assert.NoError(err)
 	// retrieve layers
@@ -323,106 +357,170 @@ func TestBackProp(t *testing.T) {
 	assert.Error(err)
 }
 
-func TestClassify(t *testing.T) {
+func TestValidateTrainConfig(t *testing.T) {
 	assert := assert.New(t)
-	// create features matrix
-	features := []float64{5.1, 3.5, 1.4, 0.2,
-		4.9, 3.0, 1.4, 0.2,
-		4.7, 3.2, 1.3, 0.2,
-		4.6, 3.1, 1.5, 0.2,
-		5.0, 3.6, 1.4, 0.2}
-	inMx := mat64.NewDense(5, 4, features)
-	inRows, inCols := inMx.Dims()
-	// create test network
-	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
-	assert.NotNil(c)
-	assert.NoError(err)
-	// simplify the config
-	c.Arch.Input.Size = inCols
-	hiddenLayers := []*config.LayerConfig{
-		{Kind: "hidden",
-			Size: 5,
-			NeurFn: &config.NeuronConfig{
-				ActFn:     matrix.SigmoidMx,
-				ActGradFn: matrix.SigmoidGradMx},
+	// start with correct config
+	c := &config.TrainConfig{
+		Kind:   "backprop",
+		Cost:   "xentropy",
+		Lambda: 1.0,
+		Optimize: &config.OptimConfig{
+			Method:     "bfgs",
+			Iterations: 50,
 		},
 	}
-	c.Arch.Hidden = hiddenLayers
-	c.Arch.Output.Size = 5
-	net, err := NewNetwork(c)
-	assert.NotNil(net)
+	err := ValidateTrainConfig(c)
 	assert.NoError(err)
-	// classify the features input
-	out, err := net.Classify(inMx)
-	assert.NotNil(net)
+	// config can't be nil
+	err = ValidateTrainConfig(nil)
+	assert.Error(err)
+	// unsupported cost function
+	origCost := c.Cost
+	c.Cost = "fooCost"
+	err = ValidateTrainConfig(c)
+	assert.Error(err)
+	c.Cost = origCost
+	// wrong lambda
+	origLambda := c.Lambda
+	c.Lambda = -100
+	err = ValidateTrainConfig(c)
+	assert.Error(err)
+	c.Lambda = origLambda
+	// unsupported Optimization method
+	origMethod := c.Optimize.Method
+	c.Optimize.Method = "foobar"
+	err = ValidateTrainConfig(c)
+	assert.Error(err)
+	c.Optimize.Method = origMethod
+	// Wrong number of iterations
+	origIters := c.Optimize.Iterations
+	c.Optimize.Iterations = -10
+	err = ValidateTrainConfig(c)
+	assert.Error(err)
+	c.Optimize.Iterations = origIters
+}
+
+func TestTrain(t *testing.T) {
+	assert := assert.New(t)
+	// basic configuration settings
+	tmpPath := path.Join(os.TempDir(), fileName)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
 	assert.NoError(err)
-	oRows, oCols := out.Dims()
-	assert.Equal(oRows, inRows)
-	assert.Equal(oCols, c.Arch.Output.Size)
-	// pass a vector in
-	tstIn := inMx.RowView(0).T()
-	out, err = net.Classify(tstIn)
-	assert.NotNil(net)
+	// create new network
+	netConf := conf.Network
+	n, err := NewNetwork(netConf)
+	assert.NotNil(n)
 	assert.NoError(err)
-	oRows, oCols = out.Dims()
-	assert.Equal(oRows, 1)
-	assert.Equal(oCols, c.Arch.Output.Size)
+	// nil config causes error
+	trainConf := conf.Training
+	err = n.Train(nil, inMx, labelsVec)
+	assert.Error(err)
+	// nil input causes error
+	err = n.Train(trainConf, nil, labelsVec)
+	assert.Error(err)
+	// nil labelsVec causes error
+	err = n.Train(trainConf, inMx, nil)
+	assert.Error(err)
+	// calculate cost
+	err = n.Train(trainConf, inMx, labelsVec)
+	assert.NoError(err)
+}
+
+func TestClassify(t *testing.T) {
+	assert := assert.New(t)
+	// basic configuration settings
+	tmpPath := path.Join(os.TempDir(), fileName)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
+	assert.NoError(err)
+	// create new network
+	netConf := conf.Network
+	n, err := NewNetwork(netConf)
+	assert.NotNil(n)
+	assert.NoError(err)
 	// nil input throws error
-	out, err = net.Classify(nil)
-	assert.Nil(out)
+	classOut, err := n.Classify(nil)
+	assert.Nil(classOut)
 	assert.Error(err)
-	// invalid network
-	net = new(Network)
-	out, err = net.Classify(tstIn)
-	assert.Nil(out)
-	assert.Error(err)
+	// classify the features input
+	classOut, err = n.Classify(inMx)
+	assert.NotNil(n)
+	assert.NoError(err)
+	inRows, _ := inMx.Dims()
+	oRows, oCols := classOut.Dims()
+	// every input must be classified
+	assert.Equal(oRows, inRows)
+	// output vector is a one-of-N classification vector
+	assert.Equal(oCols, netConf.Arch.Output.Size)
+	// pass a single vector in
+	tstIn := inMx.RowView(0).T()
+	classOut, err = n.Classify(tstIn)
+	assert.NotNil(n)
+	assert.NoError(err)
+	oRows, oCols = classOut.Dims()
+	assert.Equal(oRows, 1)
+	assert.Equal(oCols, netConf.Arch.Output.Size)
 }
 
 func TestValidate(t *testing.T) {
 	assert := assert.New(t)
-	// create features matrix
-	features := []float64{5.1, 3.5, 1.4, 0.2,
-		4.9, 3.0, 1.4, 0.2,
-		4.7, 3.2, 1.3, 0.2,
-		4.6, 3.1, 1.5, 0.2,
-		5.0, 3.6, 1.4, 0.2}
-	inMx := mat64.NewDense(5, 4, features)
-	_, inCols := inMx.Dims()
-	// create test network
+	// basic configuration settings
 	tmpPath := path.Join(os.TempDir(), fileName)
-	c, err := config.NewNetConfig(tmpPath)
-	assert.NotNil(c)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
 	assert.NoError(err)
-	// simplify the config
-	c.Arch.Input.Size = inCols
-	hiddenLayers := []*config.LayerConfig{
-		{Kind: "hidden",
-			Size: 5,
-			NeurFn: &config.NeuronConfig{
-				ActFn:     matrix.SigmoidMx,
-				ActGradFn: matrix.SigmoidGradMx},
-		},
-	}
-	c.Arch.Hidden = hiddenLayers
-	c.Arch.Output.Size = 5
-	net, err := NewNetwork(c)
-	assert.NotNil(net)
+	// create new network
+	netConf := conf.Network
+	n, err := NewNetwork(netConf)
+	assert.NotNil(n)
 	assert.NoError(err)
 	// expected labels
 	expVal := []float64{2, 1, 3, 2, 4}
 	expVec := mat64.NewVector(len(expVal), expVal)
-	// run validation
-	success, err := net.Validate(inMx, expVec)
-	assert.NoError(err)
-	assert.True(success < 100.0)
 	// nil input throws error
-	success, err = net.Validate(nil, expVec)
+	success, err := n.Validate(nil, expVec)
 	assert.Error(err)
 	assert.True(success == 0.0)
-	// invalid network
-	net = new(Network)
-	success, err = net.Validate(inMx, expVec)
+	// nil expected value throws error
+	success, err = n.Validate(inMx, nil)
+	assert.Error(err)
 	assert.True(success == 0.0)
+	// run validation
+	success, err = n.Validate(inMx, expVec)
+	assert.NoError(err)
+	assert.True(success < 100.0)
+}
+
+func TestSetNetWeights(t *testing.T) {
+	assert := assert.New(t)
+	// basic configuration settings
+	tmpPath := path.Join(os.TempDir(), fileName)
+	conf, err := config.New(tmpPath)
+	assert.NotNil(conf)
+	assert.NoError(err)
+	// create new network
+	netConf := conf.Network
+	n, err := NewNetwork(netConf)
+	assert.NotNil(n)
+	assert.NoError(err)
+	// Neural net layers
+	layers := n.Layers()
+	acc := 0
+	for _, layer := range layers[1:] {
+		r, c := layer.Weights().Dims()
+		acc += r * c
+	}
+	weights := make([]float64, acc)
+	var netWeights []float64
+	err = setNetWeights(layers[1:], weights)
+	assert.NoError(err)
+	for i := range layers[1:] {
+		netWeights = append(netWeights, matrix.Mx2Vec(layers[i+1].Weights(), false)...)
+	}
+	assert.Equal(weights, netWeights)
+	// incorrect length of weights
+	weights = make([]float64, 5)
+	err = setNetWeights(layers[1:], weights)
 	assert.Error(err)
 }

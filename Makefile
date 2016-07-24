@@ -5,10 +5,10 @@ SRCPATH=./cmd
 BUILDPATH=./_build
 PACKAGES=$(shell go list ./... | grep -v /vendor/)
 
-bprop: builddir
+build: builddir
 	$(BUILD) -v -o $(BUILDPATH)/bprop $(SRCPATH)/bprop
 
-all: builddir bprop
+all: builddir build
 
 install:
 	$(INSTALL) $(SRCPATH)/...

@@ -5,7 +5,6 @@ import (
 
 	"github.com/gonum/matrix/mat64"
 	"github.com/milosgajdos83/go-neural/pkg/config"
-	"github.com/milosgajdos83/go-neural/pkg/matrix"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,15 +32,14 @@ func TestNewLayer(t *testing.T) {
 		Kind: "input",
 		Size: 10,
 		NeurFn: &config.NeuronConfig{
-			ActFn:     matrix.SigmoidMx,
-			ActGradFn: matrix.SigmoidGradMx,
+			Activation: "sigmoid",
 		},
 	}
 	// invalid layer parameters passed in
 	tstLayer, err := NewLayer(c, -10)
 	assert.Nil(tstLayer)
 	assert.Error(err)
-	// invalid layer parameters passed in
+	// invalid layer size passed in
 	c.Size = -10
 	tstLayer, err = NewLayer(c, 10)
 	assert.Nil(tstLayer)
@@ -53,7 +51,19 @@ func TestNewLayer(t *testing.T) {
 	assert.Nil(tstLayer)
 	assert.Error(err)
 	c.Kind = "input"
-	// correct cases
+	// unsupported activation
+	c.Kind = "hidden"
+	c.NeurFn.Activation = "fooact"
+	tstLayer, err = NewLayer(c, 10)
+	assert.Nil(tstLayer)
+	assert.Error(err)
+	// supported activation
+	c.NeurFn.Activation = "sigmoid"
+	tstLayer, err = NewLayer(c, 10)
+	assert.NotNil(tstLayer)
+	assert.NoError(err)
+	// correct cases - let's change activation
+	c.NeurFn.Activation = "tanh"
 	lKinds := []string{"input", "hidden", "output"}
 	for _, lKind := range lKinds {
 		c.Kind = lKind
@@ -71,8 +81,7 @@ func TestIDAndKind(t *testing.T) {
 		Kind: "input",
 		Size: 10,
 		NeurFn: &config.NeuronConfig{
-			ActFn:     matrix.SigmoidMx,
-			ActGradFn: matrix.SigmoidGradMx,
+			Activation: "sigmoid",
 		},
 	}
 	// create test network layer
@@ -95,12 +104,12 @@ func TestIDAndKind(t *testing.T) {
 func TestSetWeights(t *testing.T) {
 	assert := assert.New(t)
 
+	// test configuration
 	c := &config.LayerConfig{
 		Kind: "input",
 		Size: 20,
 		NeurFn: &config.NeuronConfig{
-			ActFn:     matrix.SigmoidMx,
-			ActGradFn: matrix.SigmoidGradMx,
+			Activation: "sigmoid",
 		},
 	}
 	// INPUT layer does not have any weights
@@ -153,12 +162,12 @@ func TestSetWeights(t *testing.T) {
 func TestFwdOut(t *testing.T) {
 	assert := assert.New(t)
 
+	// test configuration
 	c := &config.LayerConfig{
 		Kind: "input",
 		Size: 10,
 		NeurFn: &config.NeuronConfig{
-			ActFn:     matrix.SigmoidMx,
-			ActGradFn: matrix.SigmoidGradMx,
+			Activation: "sigmoid",
 		},
 	}
 	// Layer parameters

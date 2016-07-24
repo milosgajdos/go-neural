@@ -33,9 +33,10 @@ func AddBias(m mat64.Matrix) *mat64.Dense {
 }
 
 // MakeLabelsMx creates a 1-of-N matrix from the supplied vector of labels
-// Labels matrix has the following dimensions: labels.Len() x count
+// Labels matrix has the following dimensions: labels.Len() x expLabels
 // It does not modify the supplied matrix of labels.
-// It returns error if the number of labels is negative integer
+// It returns error if the number of labels is negative integer or
+// if one of the labels is non-positive or is greater than number of labels
 func MakeLabelsMx(labels *mat64.Vector, expLabels int) (*mat64.Dense, error) {
 	if expLabels < 0 {
 		return nil, fmt.Errorf("Incorrect number of labels: %d\n", expLabels)
@@ -46,6 +47,9 @@ func MakeLabelsMx(labels *mat64.Vector, expLabels int) (*mat64.Dense, error) {
 	mx := mat64.NewDense(samples, expLabels, nil)
 	for i := 0; i < samples; i++ {
 		val := labels.At(i, 0)
+		if val <= 0 || int(val) > expLabels {
+			return nil, fmt.Errorf("Incorrect label: %f\n", val)
+		}
 		mx.Set(i, int(val)-1, 1.0)
 	}
 	return mx, nil
