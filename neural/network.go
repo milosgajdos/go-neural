@@ -54,15 +54,16 @@ type Network struct {
 // It fails with error if either the requested network type is not supported or
 // if any of the neural network layers failed to be created.
 func NewNetwork(c *config.NetConfig) (*Network, error) {
+	// supplied configuration cant be nil
 	if c == nil {
-		return nil, fmt.Errorf("Invalid network configuration supplied: %v\n", c)
+		return nil, fmt.Errorf("Invalid network configuration: %v\n", c)
 	}
 	// check if the requested network is supported and retrieve its constructor
 	createNet, ok := network[c.Kind]
 	if !ok {
 		return nil, fmt.Errorf("Unsupported neural network type: %s\n", c.Kind)
 	}
-	// return network
+	// create new network and return it
 	return createNet(c.Arch)
 }
 
@@ -76,13 +77,17 @@ func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
 	net := &Network{}
 	net.id = helpers.PseudoRandString(10)
 	net.kind = FEEDFWD
-	// Create INPUT layer: INPUT layer has no activation function
+	// INPUT layer can't be nil
+	if arch.Input == nil {
+		return nil, fmt.Errorf("Invalid INPUT layer: %s\n", arch.Input)
+	}
+	// Create INPUT layer
 	layerInSize := arch.Input.Size
 	inLayer, err := NewLayer(arch.Input, arch.Input.Size)
 	if err != nil {
 		return nil, err
 	}
-	// add neural net layer to network
+	// add INPUT layer to network layer stack
 	if err := net.AddLayer(inLayer); err != nil {
 		return nil, err
 	}
@@ -99,6 +104,10 @@ func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
 		// layerInSize is set to output of the previous layer
 		layerInSize = layerConfig.Size
 	}
+	// OUTPUT layer can't be nil
+	if arch.Output == nil {
+		return nil, fmt.Errorf("Invalid OUTPUT layer: %s\n", arch.Output)
+	}
 	// Create OUTPUT layer
 	outLayer, err := NewLayer(arch.Output, layerInSize)
 	if err != nil {
@@ -111,63 +120,48 @@ func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
 	return net, nil
 }
 
-// AddLayer adds layer to neural network or fails with error
-// AddLayer places restrictions on adding new layers:
-// 1. INPUT layer  - there must only be one INPUT layer
+// AddLayer adds a neural layer to neural network or fails with error
+// AddLayer places restrictions on adding new layers to the network:
+// 1. INPUT layer  - there can only be one INPUT layer
 // 2. HIDDEN layer - new HIDDEN layer is appened after the last HIDDEN layer
-// 3. OUTPUT layer - there must only be one OUTPUT layer
+// 3. OUTPUT layer - there can only be one OUTPUT layer
 // AddLayer fails with error if either 1. or 3. are not satisfied
-// TODO: simplify this madness
 func (n *Network) AddLayer(layer *Layer) error {
 	layerCount := len(n.layers)
 	// if no layer exists yet, just append
 	if layerCount == 0 {
 		n.layers = append(n.layers, layer)
+		return nil
 	}
-	// if one layer already exists it depends on which one we are adding
-	if layerCount == 1 {
-		switch n.layers[0].Kind() {
-		case INPUT:
-			if layer.Kind() == INPUT {
-				return fmt.Errorf("Can't create multiple INPUT layers\n")
-			}
-			n.layers = append(n.layers, layer)
-		case OUTPUT:
-			if layer.Kind() == OUTPUT {
-				return fmt.Errorf("Can't create multiple OUTPUT layers\n")
-			}
-			n.layers = append(n.layers, layer)
-		default:
-			n.layers = append(n.layers, layer)
+	// pick first and last layer
+	firstLayer := n.layers[0]
+	lastLayer := n.layers[layerCount-1]
+	// different cases for different layers
+	switch k := layer.Kind(); k {
+	case INPUT:
+		if k == firstLayer.Kind() {
+			return fmt.Errorf("Duplicate %s layers not allowed\n", k)
 		}
-	}
-	if layerCount > 1 {
-		switch layer.Kind() {
-		case INPUT:
-			if n.layers[0].Kind() == INPUT {
-				return fmt.Errorf("Can't create multiple INPUT layers\n")
-			}
-			// Prepend - i.e. place INPUT at the first position
-			n.layers = append([]*Layer{layer}, n.layers...)
-		case OUTPUT:
-			if n.layers[layerCount-1].Kind() == OUTPUT {
-				return fmt.Errorf("Can't create multiple OUTPUT layers\n")
-			}
-			// append at the end
-			n.layers = append(n.layers, layer)
-		case HIDDEN:
-			// find last hidden layer and append afterwards
-			var lastHidden int
-			for i, l := range n.layers {
-				if l.Kind() == HIDDEN {
-					lastHidden = i
-				}
-			}
-			// expand capacity
-			n.layers = append(n.layers, nil)
-			copy(n.layers[lastHidden+2:], n.layers[lastHidden+1:])
-			n.layers[lastHidden+1] = layer
+		// prepend INPUT layer i.e. add it at the beginning
+		n.layers = append([]*Layer{layer}, n.layers...)
+	case OUTPUT:
+		if k == lastLayer.Kind() {
+			return fmt.Errorf("Duplicate %s layers not allowed\n", k)
 		}
+		// append OUTPUT layer i.e. add it at the end
+		n.layers = append(n.layers, layer)
+	case HIDDEN:
+		// find last hidden layer and append afterwards
+		var lastHidden int
+		for i, l := range n.layers {
+			if l.Kind() == HIDDEN {
+				lastHidden = i
+			}
+		}
+		// append new HIDDEN layer after the last HIDDEN layer
+		n.layers = append(n.layers, nil)
+		copy(n.layers[lastHidden+2:], n.layers[lastHidden+1:])
+		n.layers[lastHidden+1] = layer
 	}
 	return nil
 }

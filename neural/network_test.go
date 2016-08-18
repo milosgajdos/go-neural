@@ -118,6 +118,13 @@ func TestNewNetwork(t *testing.T) {
 	assert.Nil(n)
 	assert.Error(err)
 	c.Arch = origArch
+	// nil INPUT
+	origInput := c.Arch.Input
+	c.Arch.Input = nil
+	n, err = NewNetwork(c)
+	assert.Nil(n)
+	assert.Error(err)
+	c.Arch.Input = origInput
 	// incorrect INPUT layer size
 	origInSize := c.Arch.Input.Size
 	c.Arch.Input.Size = -100
@@ -132,6 +139,13 @@ func TestNewNetwork(t *testing.T) {
 	assert.Nil(n)
 	assert.Error(err)
 	c.Arch.Hidden[0].Size = origHidSize
+	// nil OUTPUT
+	origOutput := c.Arch.Output
+	c.Arch.Output = nil
+	n, err = NewNetwork(c)
+	assert.Nil(n)
+	assert.Error(err)
+	c.Arch.Output = origOutput
 	// incorrect OUTPUT layer size
 	origOutSize := c.Arch.Output.Size
 	c.Arch.Output.Size = -100
