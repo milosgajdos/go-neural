@@ -6,9 +6,9 @@
 [![Go Report Card](https://goreportcard.com/badge/milosgajdos83/go-neural)](https://goreportcard.com/report/github.com/milosgajdos83/go-neural)
 [![codecov](https://codecov.io/gh/milosgajdos83/go-neural/branch/master/graph/badge.svg)](https://codecov.io/gh/milosgajdos83/go-neural)
 
-This project provides a basic implementation of Feedforward Neural Network classifier. An example implementation can be found in the project's root directory. You can build your own neural networks using the project's library packages.
+`go-neural` provides a simple implementation of [Feedforward Neural Network](https://en.wikipedia.org/wiki/Feedforward_neural_network) classifier. In addition the project provides few packages that can be used to build your own neural networks.
 
-The code in this project has been developed and tested with on the following versions of Go:
+The code in this project has been developed and tested with both of the following versions of Go:
 
 * `go1.6.3 darwin/amd64`
 * `go1.7 darwin/amd64`
@@ -59,7 +59,7 @@ Feel free to explore the `Makefile` available in the root directory.
 
 ### Manifest
 
-`go-neural` lets you define neural network architecture via a simple `YAML` file called `manifest` file which can then be passed to via cli parameters to the example program shipped by the project. An example manifest file looks like below:
+`go-neural` allows you to define neural network architecture via a simple `YAML` file called `manifest` which can be passed to the example program shipped with the project via cli parameter. You can see the example manifest below along with some basic documentation:
 
 ```yaml
 kind: feedfwd                 # network type: only feedforward networks
@@ -83,7 +83,7 @@ training:                     # network training
     iterations: 80            # 80 BFGS iterations
 ```
 
-The above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also specify some advanced optmization parameters. The project provides a simple manifest parser package. You can explore all available parameters in the `config` package.
+As you can see the above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also specify some advanced optmization parameters. The project provides a simple manifest parser package. You can explore all available parameters in the `config` package.
 
 ### Build your own neural networks
 
