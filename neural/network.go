@@ -79,7 +79,7 @@ func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
 	net.kind = FEEDFWD
 	// INPUT layer can't be nil
 	if arch.Input == nil {
-		return nil, fmt.Errorf("Invalid INPUT layer: %s\n", arch.Input)
+		return nil, fmt.Errorf("Invalid INPUT layer: %v\n", arch.Input)
 	}
 	// Create INPUT layer
 	layerInSize := arch.Input.Size
@@ -106,7 +106,7 @@ func createFeedFwdNetwork(arch *config.NetArch) (*Network, error) {
 	}
 	// OUTPUT layer can't be nil
 	if arch.Output == nil {
-		return nil, fmt.Errorf("Invalid OUTPUT layer: %s\n", arch.Output)
+		return nil, fmt.Errorf("Invalid OUTPUT layer: %v\n", arch.Output)
 	}
 	// Create OUTPUT layer
 	outLayer, err := NewLayer(arch.Output, layerInSize)
@@ -226,7 +226,7 @@ func (n *Network) BackProp(inMx, errMx mat64.Matrix, fromLayer int) error {
 	}
 	// can't BP empty error
 	if errMx == nil {
-		return fmt.Errorf("Can't backpropagate ouput error: %v\n", errMx)
+		return fmt.Errorf("Can't backpropagate output error: %v\n", errMx)
 	}
 	// get all the layers
 	layers := n.Layers()

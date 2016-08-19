@@ -23,19 +23,19 @@ type ActivFunc func(int, int, float64) float64
 
 // activations maps activation function names to their actual implementations
 var activations = map[string]map[string]ActivFunc{
-	"sigmoid": map[string]ActivFunc{
+	"sigmoid": {
 		"act":  matrix.SigmoidMx,
 		"grad": matrix.SigmoidGradMx,
 	},
-	"softmax": map[string]ActivFunc{
+	"softmax": {
 		"act":  matrix.ExpMx,
 		"grad": matrix.SigmoidGradMx,
 	},
-	"tanh": map[string]ActivFunc{
+	"tanh": {
 		"act":  matrix.TanhMx,
 		"grad": matrix.TanhGradMx,
 	},
-	"relu": map[string]ActivFunc{
+	"relu": {
 		"act":  matrix.ReluMx,
 		"grad": matrix.ReluGradMx,
 	},

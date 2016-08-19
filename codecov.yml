@@ -1,5 +1,3 @@
-comment:
-  layout: header, changes, diff, sunburst
 coverage:
   status:
     patch: false
@@ -8,3 +6,7 @@ coverage:
         enabled: yes
         target: 0
     changes: false
+
+comment:
+  layout: header, changes, diff, sunburst
+  behavior: default

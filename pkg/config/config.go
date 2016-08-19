@@ -59,9 +59,9 @@ type Manifest struct {
 
 // network maps supported training and optimization parameters to a particular neural network
 var network = map[string]map[string][]string{
-	"feedfwd": map[string][]string{
-		"training": []string{"backprop"},
-		"optim":    []string{"bfgs"},
+	"feedfwd": {
+		"training": {"backprop"},
+		"optim":    {"bfgs"},
 	},
 }
 

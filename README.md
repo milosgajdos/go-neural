@@ -6,14 +6,12 @@
 [![Go Report Card](https://goreportcard.com/badge/milosgajdos83/go-neural)](https://goreportcard.com/report/github.com/milosgajdos83/go-neural)
 [![codecov](https://codecov.io/gh/milosgajdos83/go-neural/branch/master/graph/badge.svg)](https://codecov.io/gh/milosgajdos83/go-neural)
 
-This project provides a basic implementation of Feedforward Neural Network classifier. You can find an example implementation of [backpropagation algorithm](https://en.wikipedia.org/wiki/Backpropagation) for a 3 layers [feedforward neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network) multivariate classifier in the project's `cmd/` subfolder. In the future I will be hopefully adding more interesting and more advanced examples.
+This project provides a basic implementation of Feedforward Neural Network classifier. An example implementation can be found in the project's root directory. You can build your own neural networks using the project's library packages.
 
-The code in this project has been developed and tested with the following version of Go:
+The code in this project has been developed and tested with on the following versions of Go:
 
-```
-$ go version
-go version go1.6.3 darwin/amd64
-```
+* `go1.6.3 darwin/amd64`
+* `go1.7 darwin/amd64`
 
 ## Get started
 
@@ -23,7 +21,73 @@ Get the source code:
 $ go get -u github.com/milosgajdos83/go-neural
 ```
 
-Once you have successfully downloaded all the packages you can start building simple neural networks using the packages provided by the project. For example, if you want to create a simple feedforward neural network you can do so using the following code:
+Build the example program:
+
+```
+$ make build
+mkdir -p ./_build
+go build -v -o ./_build/nnet
+github.com/milosgajdos83/go-neural/vendor/github.com/gonum/stat
+github.com/milosgajdos83/go-neural/pkg/config
+github.com/milosgajdos83/go-neural/neural
+github.com/milosgajdos83/go-neural/pkg/dataset
+github.com/milosgajdos83/go-neural
+```
+
+If the build succeeds, you should find the resulting binary in `_build` directory. Explore all of the available options:
+
+```
+$ ./_build/nnet -h
+Usage of ./_build/nnet:
+  -data string
+        Path to training data set
+  -labeled
+        Is the data set labeled
+  -manifest string
+        Path to a neural net manifest file
+  -scale
+        Require data scaling
+```
+
+Run the tests:
+
+```
+$ make test
+```
+
+Feel free to explore the `Makefile` available in the root directory.
+
+### Manifest
+
+`go-neural` lets you define neural network architecture via a simple `YAML` file called `manifest` file which can then be passed to via cli parameters to the example program shipped by the project. An example manifest file looks like below:
+
+```yaml
+kind: feedfwd                 # network type: only feedforward networks
+task: class                   # network task: only classification tasks
+network:                      # network architecture: layers and activations
+  input:                      # INPUT layer
+    size: 400                 # 400 inputs
+  hidden:                     # HIDDEN layer
+    size: [25]                # Array of all hidden layers
+    activation: relu          # ReLU activation function
+  output:                     # OUTPUT layer
+    size: 10                  # 10 outputs - this implies 10 classes
+    activation: softmax       # softmax activation function
+training:                     # network training
+  kind: backprop              # type of training: backpropagation only
+  cost: xentropy              # cost function: cross entropy (loglikelhood available too)
+  params:                     # training parameters
+    lambda: 1.0               # lambda is a regularizer
+  optimize:                   # optimization parameters
+    method: bfgs              # BFGS optimization algorithm
+    iterations: 80            # 80 BFGS iterations
+```
+
+The above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also specify some advanced optmization parameters. The project provides a simple manifest parser package. You can explore all available parameters in the `config` package.
+
+### Build your own neural networks
+
+Instead of using the manifest file and the example program provided in the root directory, you can build simple neural networks using the packages provided by the project. For example, if you want to create a simple feedforward neural network using the packages in this project, you can do so using the following code:
 
  ```go
 package main
@@ -71,54 +135,16 @@ func main() {
 }
 ```
 
-You can explore the project's packages and API in [godoc](https://godoc.org/github.com/milosgajdos83/go-neural).
+You can explore the project's packages and API in [godoc](https://godoc.org/github.com/milosgajdos83/go-neural). The project's documentation needs some serious improvement, though :-)
 
-## Manifest
+## Experimenting
 
-`go-neural` lets you define neural network architecture via what's called a `manifest` file which you can parse in your programs using the project's manifest parser package. An example manifest file looks like below:
-
-```yaml
-kind: feedfwd                 # network type: only feedforward networks
-task: class                   # network task: only classification tasks
-network:                      # network architecture: layers and activations
-  input:                      # INPUT layer
-    size: 400                 # 400 inputs
-  hidden:                     # HIDDEN layer
-    size: [25]                # Array of all hidden layers
-    activation: relu          # ReLU activation function
-  output:                     # OUTPUT layer
-    size: 10                  # 10 outputs - this implies 10 classes
-    activation: softmax       # softmax activation function
-training:                     # network training
-  kind: backprop              # type of training: backpropagation only
-  cost: xentropy              # cost function: cross entropy (loglikelhood available too)
-  params:                     # training parameters
-    lambda: 1.0               # lambda is a regularizer
-  optimize:                   # optimization parameters
-    method: bfgs              # BFGS optimization algorithm
-    iterations: 80            # 80 BFGS iterations
-```
-
-The above manifest defines 3 layers neural network which uses [ReLU](https://en.wikipedia.org/wiki/Rectifier_(neural_networks)) activation function for all of its hidden layers and [softmax](https://en.wikipedia.org/wiki/Softmax_function) for its output layer. You can also specify some advanced optmization parameters. You can explore all available parameters in `config` package.
-
-## Backpropagation
-
-The project provides an example program available in `cmd/bprop` directory which performs a classification of MNIST digits and then reports the classification success rate. The network accuracy is validated against the training data set for brevity. In real life example you must use a separate validation data set! Lastly, the example program also reports classification result for the first data sample.
-
-You can build the example program by running `bprop` make task:
-
-```
-$ make bprop
-```
-
-This will place the resulting binary into `_build` project's subdirectory if the build succeeds. To test the program, there is an example data set available in the `testdata` subdirectory which contains a sample of 5000 images from [MNIST](http://yann.lecun.com/exdb/mnist/) database for training and validation.
-
-You can see various example runs with different parameters specified via manifest file below. You can find various examples of manifest files in `cmd/bprop` folder of the project source tree.
+There is a simple [MNIST](http://yann.lecun.com/exdb/mnist/) data set available in `testdata/` subdirectory to play around with. Furthermore, you can find multiple examples of different neural network manifest files in `manifests/` subdirectory. Fore brevit, see the results of some of the manifest configurations below.
 
 ### ReLU -> Softmax -> Cross Entropy
 
 ```
-$ time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example.yml
+$ time ./_build/nnet -labeled -data ./testdata/data.csv -manifest manifests/example.yml
 Current Cost: 3.421197
 Current Cost: 3.087151
 Current Cost: 2.731485
@@ -153,7 +179,7 @@ You can see that the neural network classification accuracy **on the training da
 ### ReLU -> Softmax -> Log Likelihood
 
 ```
-time ./_build/bprop -labeled -data ./testdata/data.csv -manifest cmd/bprop/example4.yml
+time ./_build/nnet -labeled -data ./testdata/data.csv -manifest manifests/example4.yml
 Current Cost: 2.455806
 Current Cost: 2.157898
 Current Cost: 1.858962
